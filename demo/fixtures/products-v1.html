@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My Store</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    max-width: 560px;
+    margin: 2rem auto;
+    padding: 0 1.25rem;
+    color: #1b1d21;
+    background: #fafaf7;
+  }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+  .subtitle { color: #7a7d84; margin: 0 0 1.5rem; }
+  main { padding-left: 1rem; border-left: 3px solid transparent; transition: border-color .2s ease; }
+  main[data-featured="yes"] { border-left-color: #e8b57a; }
+  .product {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: .75rem;
+    padding: .625rem 0;
+    border-bottom: 1px solid #e7e6e1;
+  }
+  .product:last-child { border-bottom: none; }
+  .product .name { font-weight: 600; margin: 0; font-size: 1rem; }
+  .product .price { color: #3a3d44; font-variant-numeric: tabular-nums; }
+  .product .tag {
+    grid-column: 1 / -1;
+    font-size: .7rem;
+    color: #8a8d94;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-top: .125rem;
+  }
+  .tag-cloud {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    padding-top: 1rem;
+    border-top: 1px solid #e7e6e1;
+  }
+  .tag-cloud .tag {
+    font-size: .72rem;
+    color: #5a5d64;
+    background: #efede6;
+    border-radius: 3px;
+    padding: .25rem .55rem;
+    letter-spacing: .02em;
+  }
+</style>
+</head>
+<body data-featured="yes">
+
+<h1>My Store</h1>
+<p class="subtitle">Where things are sold.</p>
+
+<main>
+  <div class="product">
+    <h2 class="name">Widget A</h2>
+    <div class="price">$10</div>
+    <span class="tag">new</span>
+  </div>
+  <div class="product">
+    <h2 class="name">Widget B</h2>
+    <div class="price">$20</div>
+    <span class="tag">sale</span>
+  </div>
+</main>
+
+<footer class="tag-cloud">
+  <span class="tag">featured</span>
+  <span class="tag">2026</span>
+</footer>
+
+<script type="application/hyper-html-api" id="hyper-html-api" data-rules-version="1">
+{
+  "title": "h1",
+  "subtitle": ".subtitle",
+  "featured": "@data-featured",
+  "products": [".product", { "name": ".name", "price": ".price", "tag": ".tag" }],
+  "tags": ".tag-cloud .tag[]"
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hyper-html-api playground</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="shell" id="shell">
+
+  <header class="header">
+    <div class="brand">hyper-html-api <span>/</span> playground</div>
+    <div class="tools">
+      <label class="field-checkbox" style="margin-right:.5rem;">
+        <input type="checkbox" id="view-toggle"> <span>upgrade view</span>
+      </label>
+      <select class="btn" id="fixture-select" aria-label="Fixture">
+        <option value="products-v1">products</option>
+      </select>
+      <button class="btn" id="reset-btn" title="Reset fixture">reset</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="pane app-pane">
+      <div class="pane-header">
+        <span class="single-only">rendered app</span>
+        <span class="upgrade-only">v1 app</span>
+      </div>
+      <div class="pane-body">
+        <iframe class="app-iframe" id="app-frame"></iframe>
+      </div>
+    </div>
+
+    <div class="pane data-pane single-only">
+      <div class="pane-header">
+        data
+        <span class="count" id="data-count"></span>
+      </div>
+      <div class="pane-body">
+        <div class="error-banner" id="error-banner"></div>
+        <form id="data-form"></form>
+      </div>
+    </div>
+
+    <div class="pane app-pane upgrade-only">
+      <div class="pane-header"><span>v2 preview</span></div>
+      <div class="pane-body">
+        <iframe class="app-iframe" id="app-frame-v2"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="pane">
+      <div class="pane-header">rules (read-only)</div>
+      <div class="pane-body"><pre class="rules-view" id="rules-view">(loading…)</pre></div>
+    </div>
+    <div class="pane">
+      <div class="pane-header">
+        <span class="single-only">extract</span>
+        <span class="upgrade-only">migration</span>
+      </div>
+      <div class="pane-body">
+        <pre class="json-view single-only" id="extract-view">(loading…)</pre>
+        <div class="upgrade-only transform-pane" id="transform-pane">
+          <div style="font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.4rem;">
+            transform <span style="text-transform:none;letter-spacing:0;color:var(--text-faint);">(optional — v1Data → v2Data)</span>
+          </div>
+          <textarea id="transform-code" spellcheck="false" placeholder="// example&#10;// return { ...v1Data, heading: v1Data.title }"></textarea>
+          <div class="transform-actions">
+            <button class="btn primary" id="migrate-btn">migrate →</button>
+            <button class="btn" id="transform-clear">clear transform</button>
+          </div>
+          <div class="summary-card" id="summary-card" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="./playground.js"></script>
+
+</body>
+</html>
