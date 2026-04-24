@@ -438,6 +438,7 @@ select.btn {
 
 .transform-pane {
   padding: 0.75rem 1rem;
+  flex-direction: column;
 }
 
 .transform-pane textarea {

@@ -1,5 +1,6 @@
 import HyperHtmlApi from '../src/hyper-html-api.js'
 import { buildForm } from './form-builder.js'
+import { shapeMatch, applyTransform, formatSummary } from './upgrade-runner.js'
 
 const { engine } = HyperHtmlApi
 
@@ -7,6 +8,11 @@ const { engine } = HyperHtmlApi
 
 const FIXTURES = {
   'products-v1': './fixtures/products-v1.html',
+}
+
+// Upgrade pairs: maps a v1 fixture key to its v2 counterpart for the migrate flow.
+const UPGRADE_PAIRS = {
+  'products-v1': './fixtures/products-v2.html',
 }
 
 const state = {
@@ -175,7 +181,58 @@ dom.resetBtn.addEventListener('click', reset)
 dom.viewToggle.addEventListener('change', () => {
   state.view = dom.viewToggle.checked ? 'upgrade' : 'single'
   dom.shell.classList.toggle('view-upgrade', state.view === 'upgrade')
+  if (state.view === 'upgrade') loadV2()
 })
+
+dom.migrateBtn.addEventListener('click', runMigration)
+dom.transformClear.addEventListener('click', () => {
+  dom.transformCode.value = ''
+})
+
+async function loadV2() {
+  const v2Url = UPGRADE_PAIRS[state.fixture]
+  if (!v2Url) {
+    showError(`no v2 counterpart configured for "${state.fixture}"`)
+    return
+  }
+  // Reset the v2 preview frame to the pristine template each time the user
+  // flips into upgrade view so the migration is visible as a fresh transition.
+  const res = await fetch(v2Url)
+  const text = await res.text()
+  dom.frameV2.srcdoc = text
+  await new Promise((r) => dom.frameV2.addEventListener('load', r, { once: true }))
+}
+
+async function runMigration() {
+  try {
+    const v1Body = dom.frame.contentDocument.body
+    const v2Body = dom.frameV2.contentDocument.body
+    const v1Rules = state.rules
+    const v2Found = engine.findRulesIn(v2Body)
+    if (!v2Found) {
+      showError('v2 fixture has no rules tag')
+      return
+    }
+    const v2Rules = v2Found.rules
+
+    const v1Data = engine.extract(v1Body, v1Rules)
+    const { data: transformed, transformed: didTransform } = applyTransform(
+      v1Data,
+      dom.transformCode.value,
+    )
+    const { data: v2Data, summary } = shapeMatch(transformed, v2Rules)
+    engine.apply(v2Body, v2Rules, v2Data)
+
+    dom.summaryCard.style.display = 'block'
+    dom.summaryCard.innerHTML = `<strong>Migration:</strong> ${formatSummary(
+      summary,
+      didTransform,
+    )}`
+    clearError()
+  } catch (e) {
+    showError(formatError(e))
+  }
+}
 
 dom.fixtureSelect.addEventListener('change', () => {
   state.fixture = dom.fixtureSelect.value
