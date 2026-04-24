@@ -1,0 +1,9 @@
+{
+  "name": "Alice",
+  "agree": "true",
+  "locked": "true",
+  "role": null,
+  "docs_href": "https://example.com/docs",
+  "avatar_src": "/avatar.png",
+  "avatar_alt": "avatar"
+}

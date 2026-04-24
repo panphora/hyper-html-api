@@ -1,0 +1,9 @@
+{
+  "name": "#name@value",
+  "agree": "#agree@checked",
+  "locked": "#locked@disabled",
+  "role": "#role@value",
+  "docs_href": "#docs@href",
+  "avatar_src": "#avatar@src",
+  "avatar_alt": "#avatar@alt"
+}

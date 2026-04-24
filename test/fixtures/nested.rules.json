@@ -1,0 +1,10 @@
+{
+  "chapters": [".chapter", {
+    "order": "@data-order",
+    "title": ".title",
+    "sections": [".section", {
+      "title": ".section-title",
+      "paragraphs": ".para[]"
+    }]
+  }]
+}

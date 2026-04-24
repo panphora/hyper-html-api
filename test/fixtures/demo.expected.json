@@ -1,0 +1,26 @@
+{
+  "user": {
+    "id": null,
+    "name": "John Doe",
+    "role": "Admin"
+  },
+  "metrics": {
+    "revenue": "$10,000",
+    "orders": "42"
+  },
+  "products": [
+    {
+      "name": "Widget A",
+      "price": "$99"
+    },
+    {
+      "name": "Widget B",
+      "price": "$149"
+    }
+  ],
+  "tags": [
+    "New",
+    "Featured",
+    "Sale"
+  ]
+}

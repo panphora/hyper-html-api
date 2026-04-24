@@ -1,0 +1,37 @@
+{
+  "chapters": [
+    {
+      "order": "1",
+      "title": "Chapter One",
+      "sections": [
+        {
+          "title": "Intro",
+          "paragraphs": [
+            "First paragraph.",
+            "Second paragraph."
+          ]
+        },
+        {
+          "title": "Middle",
+          "paragraphs": [
+            "Only one."
+          ]
+        }
+      ]
+    },
+    {
+      "order": "2",
+      "title": "Chapter Two",
+      "sections": [
+        {
+          "title": "Solo",
+          "paragraphs": [
+            "Alone.",
+            "Together.",
+            "Apart."
+          ]
+        }
+      ]
+    }
+  ]
+}

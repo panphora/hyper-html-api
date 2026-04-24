@@ -1,0 +1,6 @@
+{
+  "user": { "id": "@data-user-id", "name": ".user-name", "role": ".user-role" },
+  "metrics": { "revenue": ".revenue", "orders": ".orders" },
+  "products": [".product", { "name": ".name", "price": ".price" }],
+  "tags": ".tag[]"
+}
