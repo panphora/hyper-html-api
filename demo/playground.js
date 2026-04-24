@@ -8,11 +8,15 @@ const { engine } = HyperHtmlApi
 
 const FIXTURES = {
   'products-v1': './fixtures/products-v1.html',
+  'blog-v1': './fixtures/blog-v1.html',
+  'notes-v1': './fixtures/notes-v1.html',
 }
 
 // Upgrade pairs: maps a v1 fixture key to its v2 counterpart for the migrate flow.
+// Fixtures without a v2 counterpart simply disable upgrade view.
 const UPGRADE_PAIRS = {
   'products-v1': './fixtures/products-v2.html',
+  'blog-v1': './fixtures/blog-v2.html',
 }
 
 const state = {
@@ -192,9 +196,11 @@ dom.transformClear.addEventListener('click', () => {
 async function loadV2() {
   const v2Url = UPGRADE_PAIRS[state.fixture]
   if (!v2Url) {
-    showError(`no v2 counterpart configured for "${state.fixture}"`)
+    showError(`no v2 counterpart for "${state.fixture}" — upgrade view is disabled for this fixture`)
+    dom.migrateBtn.disabled = true
     return
   }
+  dom.migrateBtn.disabled = false
   // Reset the v2 preview frame to the pristine template each time the user
   // flips into upgrade view so the migration is visible as a fresh transition.
   const res = await fetch(v2Url)
@@ -236,7 +242,17 @@ async function runMigration() {
 
 dom.fixtureSelect.addEventListener('change', () => {
   state.fixture = dom.fixtureSelect.value
+  dom.summaryCard.style.display = 'none'
   init()
+})
+
+// Cmd/Ctrl + Shift + R resets the current fixture. (Plain Cmd+R is the
+// browser's reload — don't fight that.)
+document.addEventListener('keydown', (e) => {
+  if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
+    e.preventDefault()
+    reset()
+  }
 })
 
 init().catch((e) => showError(formatError(e)))
