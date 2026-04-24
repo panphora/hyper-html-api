@@ -71,5 +71,11 @@
 }
 </script>
 
+<!-- Import the library so the iframe runner's helper-mode boot path fires.
+     In production, every Hyperclay app already loads hyperclay.js, which
+     embeds hyper-html-api. No transform is registered here — the runner
+     falls through to pure name-match. -->
+<script type="module" src="../../src/hyper-html-api.js"></script>
+
 </body>
 </html>

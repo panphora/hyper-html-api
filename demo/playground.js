@@ -2,7 +2,7 @@ import HyperHtmlApi from '../src/hyper-html-api.js'
 import { buildForm } from './form-builder.js'
 import { shapeMatch, applyTransform, formatSummary } from './upgrade-runner.js'
 
-const { engine } = HyperHtmlApi
+const { engine, upgrade } = HyperHtmlApi
 
 // ─ state ────────────────────────────────────────────────────────────
 
@@ -40,6 +40,7 @@ const dom = {
   errorBanner: document.getElementById('error-banner'),
   dataCount: document.getElementById('data-count'),
   migrateBtn: document.getElementById('migrate-btn'),
+  migrateIframeBtn: document.getElementById('migrate-iframe-btn'),
   transformCode: document.getElementById('transform-code'),
   transformClear: document.getElementById('transform-clear'),
   summaryCard: document.getElementById('summary-card'),
@@ -189,6 +190,7 @@ dom.viewToggle.addEventListener('change', () => {
 })
 
 dom.migrateBtn.addEventListener('click', runMigration)
+dom.migrateIframeBtn.addEventListener('click', runMigrationViaIframe)
 dom.transformClear.addEventListener('click', () => {
   dom.transformCode.value = ''
 })
@@ -198,9 +200,11 @@ async function loadV2() {
   if (!v2Url) {
     showError(`no v2 counterpart for "${state.fixture}" — upgrade view is disabled for this fixture`)
     dom.migrateBtn.disabled = true
+    dom.migrateIframeBtn.disabled = true
     return
   }
   dom.migrateBtn.disabled = false
+  dom.migrateIframeBtn.disabled = false
   // Reset the v2 preview frame to the pristine template each time the user
   // flips into upgrade view so the migration is visible as a fresh transition.
   const res = await fetch(v2Url)
@@ -230,13 +234,49 @@ async function runMigration() {
     engine.apply(v2Body, v2Rules, v2Data)
 
     dom.summaryCard.style.display = 'block'
-    dom.summaryCard.innerHTML = `<strong>Migration:</strong> ${formatSummary(
+    dom.summaryCard.innerHTML = `<strong>Migration (inline):</strong> ${formatSummary(
       summary,
       didTransform,
     )}`
     clearError()
   } catch (e) {
     showError(formatError(e))
+  }
+}
+
+// Production path: load the v2 source in a hidden iframe with the
+// `_hyperHtmlApi=upgrade-helper` query param. The helper inside the iframe
+// runs whatever transform that source registered (see products-v2.html for
+// an example) and posts the resulting HTML back. We render that into the v2
+// preview frame so the user can compare against the inline result.
+async function runMigrationViaIframe() {
+  const v2Url = UPGRADE_PAIRS[state.fixture]
+  if (!v2Url) {
+    showError('no v2 counterpart for this fixture')
+    return
+  }
+  try {
+    const v1Body = dom.frame.contentDocument.body
+    const v1Data = engine.extract(v1Body, state.rules)
+
+    dom.migrateIframeBtn.disabled = true
+    const { html, summary } = await upgrade.run({ sourceUrl: v2Url, v1Data })
+
+    dom.frameV2.srcdoc = html
+    await new Promise((r) =>
+      dom.frameV2.addEventListener('load', r, { once: true }),
+    )
+
+    dom.summaryCard.style.display = 'block'
+    dom.summaryCard.innerHTML = `<strong>Migration (iframe):</strong> ${formatSummary(
+      summary,
+      summary.transformApplied,
+    )}`
+    clearError()
+  } catch (e) {
+    showError(formatError(e))
+  } finally {
+    dom.migrateIframeBtn.disabled = false
   }
 }
 

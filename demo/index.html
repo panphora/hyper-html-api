@@ -72,7 +72,8 @@
           </div>
           <textarea id="transform-code" spellcheck="false" placeholder="// example&#10;// return { ...v1Data, heading: v1Data.title }"></textarea>
           <div class="transform-actions">
-            <button class="btn primary" id="migrate-btn">migrate →</button>
+            <button class="btn primary" id="migrate-btn">migrate inline →</button>
+            <button class="btn primary" id="migrate-iframe-btn" title="Run the production iframe + postMessage flow against v2's registered transform">migrate via iframe →</button>
             <button class="btn" id="transform-clear">clear transform</button>
           </div>
           <div class="summary-card" id="summary-card" style="display:none;"></div>
