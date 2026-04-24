@@ -1,4 +1,5 @@
 export { extract } from './extract.js'
+export { apply } from './apply.js'
 export { findRulesIn } from './rules-tag.js'
 export { parseStrict, parseRelaxed } from './rules.js'
 export * as errors from './errors.js'

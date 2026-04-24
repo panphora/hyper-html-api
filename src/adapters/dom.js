@@ -74,6 +74,10 @@ const dom = {
     })
     return count
   },
+
+  sameNode(a, b) {
+    return a === b
+  },
 }
 
 export default dom

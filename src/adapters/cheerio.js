@@ -81,6 +81,13 @@ const cheerioAdapter = {
     })
     return count
   },
+
+  sameNode(a, b) {
+    if (!a || !b) return false
+    const aEl = a[0]
+    const bEl = b[0]
+    return !!aEl && aEl === bEl
+  },
 }
 
 export default cheerioAdapter
