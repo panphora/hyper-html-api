@@ -11,6 +11,13 @@ const engine = {
   DOM_PROPERTIES: engineMod.DOM_PROPERTIES,
 }
 
-const HyperHtmlApi = { engine, cms: {}, upgrade: {} }
+const cms = {}
+const upgrade = {}
 
+// Named exports ensure the IIFE namespace exposes engine/cms/upgrade as direct
+// properties on the `HyperHtmlApi` global, rather than nesting them under a
+// `.default` key the way `export default` alone would.
+export { engine, cms, upgrade }
+
+const HyperHtmlApi = { engine, cms, upgrade }
 export default HyperHtmlApi
