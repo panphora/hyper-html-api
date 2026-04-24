@@ -39,7 +39,7 @@
     "test:firefox": "web-test-runner --concurrency 1 --playwright --browsers firefox",
     "test:webkit": "web-test-runner --playwright --browsers webkit",
     "test:all": "web-test-runner --concurrency 1 --playwright --browsers chromium firefox webkit",
-    "test:node": "node --test test-node/",
+    "test:node": "node --test 'test-node/**/*.test.js'",
     "test:ci": "npm run test:node && npm run test:all -- --fail-only && node test/lib/ensure-full-coverage.js",
     "test:coverage": "npm run test:chrome && node test/lib/ensure-full-coverage.js",
     "format": "prettier --write .",
@@ -50,12 +50,13 @@
     "url": "git+https://github.com/panphora/hyper-html-api.git"
   },
   "devDependencies": {
-    "cheerio": "^1.0.0-rc.12",
     "@web/test-runner": "^0.20.0",
     "@web/test-runner-playwright": "^0.11.0",
     "chai": "^4.3.6",
     "chai-dom": "^1.11.0",
+    "cheerio": "^1.0.0-rc.12",
     "esbuild": "^0.24.0",
+    "jsdom": "^29.0.2",
     "lcov-parse": "^1.0.0",
     "mocha": "^11.0.1",
     "prettier": "^3.4.2",
