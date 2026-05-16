@@ -1,8 +1,14 @@
-import { DOM_PROPERTIES_SET } from './dom-properties.js'
-import { MaxRuleDepthExceeded, ShapeMismatch } from './errors.js'
+import {
+  DOM_PROPERTIES_WRITE_SET,
+  DOM_PROPERTIES_READ_ONLY_SET,
+} from './dom-properties.js'
+import {
+  MaxRuleDepthExceeded,
+  MAX_RULE_DEPTH,
+  RuleTargetReadOnly,
+  ShapeMismatch,
+} from './errors.js'
 import { listDiff } from './diff.js'
-
-const MAX_DEPTH = 20
 
 const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
@@ -14,34 +20,43 @@ export function apply(adapter, root, rules, data) {
   applyAt(adapter, root, rules, data, { depth: 0, path: [] })
 }
 
+// applyAt returns the (possibly new) ctx node. Most rules don't change
+// ctx, but writes targeting `@outerHTML` on ctx itself replace the node;
+// downstream code (object-rule sub-walks, listDiff) needs to refresh its
+// pointer from the return value.
 export function applyAt(adapter, ctx, rule, value, trace) {
-  if (trace.depth > MAX_DEPTH) throw new MaxRuleDepthExceeded(trace.path)
-  if (value === undefined) return
+  if (trace.depth > MAX_RULE_DEPTH) throw new MaxRuleDepthExceeded(trace.path)
+  if (value === undefined) return ctx
 
   if (typeof rule === 'string') return applyScalar(adapter, ctx, rule, value, trace)
 
   if (Array.isArray(rule)) {
     const [selector, shape] = rule
-    return listDiff(adapter, ctx, selector, shape, value, trace, applyAt)
+    listDiff(adapter, ctx, selector, shape, value, trace, applyAt)
+    return ctx
   }
 
   if (typeof rule === 'object' && rule !== null) {
     for (const [key, sub] of Object.entries(rule)) {
-      applyAt(
+      const newCtx = applyAt(
         adapter,
         ctx,
         sub,
         value == null ? value : value[key],
         { depth: trace.depth + 1, path: [...trace.path, key] },
       )
+      if (newCtx && newCtx !== ctx) ctx = newCtx
     }
+    return ctx
   }
+  return ctx
 }
 
 function applyScalar(adapter, ctx, rule, value, trace) {
   if (rule.endsWith('[]')) {
     const selector = rule.slice(0, -2)
-    return listDiff(adapter, ctx, selector, null, value, trace, applyAt)
+    listDiff(adapter, ctx, selector, null, value, trace, applyAt)
+    return ctx
   }
 
   if (rule.startsWith('@')) {
@@ -49,28 +64,43 @@ function applyScalar(adapter, ctx, rule, value, trace) {
   }
 
   if (rule.includes('@')) {
-    const [selector, name] = rule.split('@')
+    const at = rule.lastIndexOf('@')
+    const selector = rule.slice(0, at)
+    const name = rule.slice(at + 1)
     const matches = selector ? adapter.find(ctx, selector) : [ctx]
-    if (matches.length === 0) return
-    return writePropOrAttr(adapter, matches[0], name, value)
+    if (matches.length === 0) return ctx
+    writePropOrAttr(adapter, matches[0], name, value)
+    return ctx
   }
 
   if (rule === '.') {
     adapter.text(ctx, value == null ? '' : String(value))
-    return
+    return ctx
   }
 
   const matches = adapter.find(ctx, rule)
-  if (matches.length === 0) return
+  if (matches.length === 0) return ctx
   adapter.text(matches[0], value == null ? '' : String(value))
+  return ctx
 }
 
+// Returns the (possibly new) node. For outerHTML, the original is detached
+// and a freshly parsed element takes its place; that new node is returned.
+// For every other write, returns the original node unchanged.
 function writePropOrAttr(adapter, node, name, value) {
-  if (DOM_PROPERTIES_SET.has(name)) {
-    adapter.prop(node, name, coercePropValue(name, value))
-  } else {
-    adapter.attr(node, name, value == null ? '' : String(value))
+  if (DOM_PROPERTIES_READ_ONLY_SET.has(name)) {
+    throw new RuleTargetReadOnly(name)
   }
+  if (name === 'outerHTML') {
+    const html = value == null ? '' : String(value)
+    return adapter.replaceWith(node, html)
+  }
+  if (DOM_PROPERTIES_WRITE_SET.has(name)) {
+    adapter.prop(node, name, coercePropValue(name, value))
+    return node
+  }
+  adapter.attr(node, name, value == null ? '' : String(value))
+  return node
 }
 
 function coercePropValue(name, value) {
@@ -82,7 +112,10 @@ function coercePropValue(name, value) {
 }
 
 function validateShape(rule, value, path, mismatches) {
-  if (value === undefined || value === null || value === '') return
+  // undefined = key omitted by caller; treat as "skip this rule entirely".
+  // null / '' are valid for scalar rules (clears the value), but NOT for
+  // list or object rules — those mismatch explicitly.
+  if (value === undefined) return
 
   if (typeof rule === 'string') {
     if (rule.endsWith('[]')) {
@@ -101,7 +134,9 @@ function validateShape(rule, value, path, mismatches) {
       }
       return
     }
-    if (typeof value === 'object') {
+    // Scalar rule. null / '' are valid (clears text/attribute). Reject
+    // only nested objects/arrays.
+    if (value !== null && typeof value === 'object') {
       mismatches.push({ path: pathStr(path), expected: 'scalar', got: typeofX(value) })
     }
     return
@@ -118,7 +153,7 @@ function validateShape(rule, value, path, mismatches) {
   }
 
   if (typeof rule === 'object' && rule !== null) {
-    if (Array.isArray(value) || typeof value !== 'object') {
+    if (value === null || Array.isArray(value) || typeof value !== 'object') {
       mismatches.push({ path: pathStr(path), expected: 'object', got: typeofX(value) })
       return
     }

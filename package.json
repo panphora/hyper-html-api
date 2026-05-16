@@ -42,8 +42,8 @@
     "test:webkit": "web-test-runner --playwright --browsers webkit",
     "test:all": "web-test-runner --concurrency 1 --playwright --browsers chromium firefox webkit",
     "test:node": "node --test 'test-node/**/*.test.js'",
-    "test:ci": "npm run test:node && npm run test:all -- --fail-only && node test/lib/ensure-full-coverage.js",
-    "test:coverage": "npm run test:chrome && node test/lib/ensure-full-coverage.js",
+    "test:ci": "npm run test:node && npm run test:all -- --fail-only && node test/lib/ensure-full-coverage.cjs",
+    "test:coverage": "npm run test:chrome && node test/lib/ensure-full-coverage.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

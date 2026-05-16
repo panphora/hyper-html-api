@@ -14,9 +14,11 @@ export class UnknownRulesVersion extends Error {
   }
 }
 
+export const MAX_RULE_DEPTH = 20
+
 export class MaxRuleDepthExceeded extends Error {
   constructor(path) {
-    super(`rule depth exceeded 20 at path: ${path.join('.')}`)
+    super(`rule depth exceeded ${MAX_RULE_DEPTH} at path: ${path.join('.')}`)
     this.name = 'MaxRuleDepthExceeded'
     this.path = path
   }
@@ -37,6 +39,14 @@ export class EmptyListInsert extends Error {
     )
     this.name = 'EmptyListInsert'
     this.path = path
+  }
+}
+
+export class RuleTargetReadOnly extends Error {
+  constructor(name) {
+    super(`cannot write to read-only DOM property "${name}"`)
+    this.name = 'RuleTargetReadOnly'
+    this.target = name
   }
 }
 

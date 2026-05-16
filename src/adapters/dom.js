@@ -61,6 +61,21 @@ const dom = {
     if (node && node.parentNode) node.parentNode.removeChild(node)
   },
 
+  replaceWith(node, html) {
+    if (!node || !node.parentNode) {
+      throw new Error('dom.replaceWith: node has no parent')
+    }
+    const doc = node.ownerDocument
+    const template = doc.createElement('template')
+    template.innerHTML = html
+    const newNode = template.content.firstElementChild
+    if (!newNode) {
+      throw new Error('dom.replaceWith: html did not parse to an element')
+    }
+    node.parentNode.replaceChild(newNode, node)
+    return newNode
+  },
+
   stripIds(node) {
     let count = 0
     if (node.id) {

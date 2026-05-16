@@ -8,6 +8,7 @@ import {
   ShapeMismatch,
   EmptyListInsert,
   MaxRuleDepthExceeded,
+  RuleTargetReadOnly,
 } from '../src/engine/errors.js'
 import cheerioAdapter from '../src/adapters/cheerio.js'
 import domAdapter from '../src/adapters/dom.js'
@@ -248,6 +249,100 @@ test('apply (jsdom) — inserted clones have IDs stripped; originals keep theirs
   assert.ok(warned && /stripped/.test(warned))
 })
 
+test('apply (jsdom) — no-op apply preserves focus on input inside list item', () => {
+  // Re-applying the same data must NOT detach/reattach matched nodes.
+  // Focus on a nested input would otherwise drop to <body>.
+  const { adapter, root } = jsdomCtx(
+    '<ul>' +
+      '<li class="item"><input class="v" id="i0" value="A"></li>' +
+      '<li class="item"><input class="v" id="i1" value="B"></li>' +
+      '</ul>',
+  )
+  const rules = { items: ['.item', { v: '.v@value' }] }
+  const i0 = root.getElementById('i0')
+  i0.focus()
+  assert.equal(root.activeElement.id, 'i0')
+
+  muteWarn()
+  apply(adapter, root, rules, { items: [{ v: 'A' }, { v: 'B' }] })
+  restoreWarn()
+
+  assert.equal(root.activeElement.id, 'i0', 'focus should be preserved')
+})
+
+test('apply (jsdom) — no-op apply does not fire MutationObserver on list parent', async () => {
+  const { adapter, root } = jsdomCtx(
+    '<ul id="lst">' +
+      '<li class="item"><span class="name">A</span></li>' +
+      '<li class="item"><span class="name">B</span></li>' +
+      '</ul>',
+  )
+  const rules = { items: ['.item', { name: '.name' }] }
+  const parent = root.getElementById('lst')
+
+  const records = []
+  const win = parent.ownerDocument.defaultView
+  const mo = new win.MutationObserver((rs) => records.push(...rs))
+  mo.observe(parent, { childList: true })
+
+  muteWarn()
+  apply(adapter, root, rules, { items: [{ name: 'A' }, { name: 'B' }] })
+  restoreWarn()
+
+  // Microtask flush
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  mo.disconnect()
+
+  assert.equal(
+    records.length,
+    0,
+    `expected zero childList mutations on no-op apply, got ${records.length}`,
+  )
+})
+
+test('apply (jsdom) — @outerHTML inside list item: listDiff updates its pointer to the new node', () => {
+  // Two-key item shape: first writes outerHTML on the item itself (replacing
+  // it with a new section), second writes a child class. The second sub-rule
+  // must operate on the REPLACED node so the class lands on the right
+  // element. If applyAt's ctx threading is broken, the second rule no-ops.
+  const { adapter, root } = jsdomCtx(
+    '<ul>' +
+      '<li class="item"><span class="lbl">old-a</span></li>' +
+      '<li class="item"><span class="lbl">old-b</span></li>' +
+      '</ul>',
+  )
+  const rules = {
+    items: [
+      '.item',
+      { html: '@outerHTML', lbl: '.lbl' },
+    ],
+  }
+  const data = {
+    items: [
+      {
+        html: '<li class="item replaced-a"><span class="lbl">stub</span></li>',
+        lbl: 'after-a',
+      },
+      {
+        html: '<li class="item replaced-b"><span class="lbl">stub</span></li>',
+        lbl: 'after-b',
+      },
+    ],
+  }
+  muteWarn()
+  apply(adapter, root, rules, data)
+  restoreWarn()
+
+  const items = Array.from(root.querySelectorAll('.item'))
+  assert.equal(items.length, 2)
+  assert.ok(items[0].classList.contains('replaced-a'))
+  assert.ok(items[1].classList.contains('replaced-b'))
+  // The .lbl sub-rule ran AFTER the outerHTML, so it should have set the
+  // new label on the replaced element.
+  assert.equal(items[0].querySelector('.lbl').textContent.trim(), 'after-a')
+  assert.equal(items[1].querySelector('.lbl').textContent.trim(), 'after-b')
+})
+
 test('apply (jsdom) — identical-item reorder preserves positions via tiebreak', () => {
   // Four identical items: similarity is 1.0 for every pair. Closest-index
   // tiebreak should keep each old node at its original position when the new
@@ -282,3 +377,148 @@ test('apply (jsdom) — identical-item reorder preserves positions via tiebreak'
     assert.equal(after[i].dataset.origIdx, String(i))
   }
 })
+
+for (const env of envs) {
+  test(`apply [${env.label}] — @-split: selector containing @ writes to the right attribute`, () => {
+    const { adapter, root } = env.make(
+      '<a class="mail" href="mailto:a@b.com" title="old">click</a>',
+    )
+    const rules = { tag: '[href*="@"]@title' }
+    apply(adapter, root, rules, { tag: 'new' })
+    assert.equal(extract(adapter, root, rules).tag, 'new')
+  })
+
+  test(`apply [${env.label}] — @href/@src write via attr; round-trip stays literal`, () => {
+    const { adapter, root } = env.make(
+      '<div><a class="lnk" href="/old">x</a><img class="pic" src="/old.png"></div>',
+    )
+    const rules = { href: '.lnk@href', src: '.pic@src' }
+    apply(adapter, root, rules, { href: '/docs', src: '/avatar.png' })
+    const result = extract(adapter, root, rules)
+    assert.equal(result.href, '/docs')
+    assert.equal(result.src, '/avatar.png')
+  })
+
+  test(`apply [${env.label}] — @tagName (read-only) throws RuleTargetReadOnly`, () => {
+    const { adapter, root } = env.make('<div><h1 id="x">A</h1></div>')
+    const rules = { t: '#x@tagName' }
+    assert.throws(
+      () => apply(adapter, root, rules, { t: 'H2' }),
+      (err) => err instanceof RuleTargetReadOnly && err.target === 'tagName',
+    )
+  })
+
+  test(`apply [${env.label}] — @offsetWidth (read-only) throws RuleTargetReadOnly`, () => {
+    const { adapter, root } = env.make('<div><span id="x">A</span></div>')
+    const rules = { w: '#x@offsetWidth' }
+    assert.throws(
+      () => apply(adapter, root, rules, { w: 100 }),
+      (err) => err instanceof RuleTargetReadOnly && err.target === 'offsetWidth',
+    )
+  })
+
+  test(`apply [${env.label}] — list rule rejects null with ShapeMismatch`, () => {
+    const { adapter, root } = env.make('<ul><li class="t">a</li></ul>')
+    assert.throws(
+      () => apply(adapter, root, { tags: '.t[]' }, { tags: null }),
+      (err) => {
+        assert.ok(err instanceof ShapeMismatch)
+        assert.equal(err.mismatches[0].path, 'tags')
+        assert.equal(err.mismatches[0].expected, 'array')
+        assert.equal(err.mismatches[0].got, 'null')
+        return true
+      },
+    )
+  })
+
+  test(`apply [${env.label}] — list rule rejects empty-string with ShapeMismatch (no silent delete)`, () => {
+    const { adapter, root, serialize } = env.make(
+      '<ul><li class="t">a</li><li class="t">b</li></ul>',
+    )
+    const before = serialize()
+    assert.throws(
+      () => apply(adapter, root, { tags: '.t[]' }, { tags: '' }),
+      (err) => err instanceof ShapeMismatch,
+    )
+    // Confirm no items were silently removed.
+    assert.equal(serialize(), before)
+  })
+
+  test(`apply [${env.label}] — tuple list rule rejects null`, () => {
+    const { adapter, root } = env.make(
+      '<ul><li class="i"><span class="x">a</span></li></ul>',
+    )
+    assert.throws(
+      () =>
+        apply(adapter, root, { items: ['.i', { x: '.x' }] }, { items: null }),
+      (err) => err instanceof ShapeMismatch,
+    )
+  })
+
+  test(`apply [${env.label}] — object rule rejects null with ShapeMismatch`, () => {
+    const { adapter, root } = env.make(
+      '<div><span class="n">N</span><span class="e">E</span></div>',
+    )
+    assert.throws(
+      () =>
+        apply(
+          adapter,
+          root,
+          { user: { name: '.n', email: '.e' } },
+          { user: null },
+        ),
+      (err) => {
+        assert.ok(err instanceof ShapeMismatch)
+        assert.equal(err.mismatches[0].path, 'user')
+        assert.equal(err.mismatches[0].expected, 'object')
+        return true
+      },
+    )
+  })
+
+  test(`apply [${env.label}] — omitted key (undefined) still skips silently`, () => {
+    const { adapter, root } = env.make(
+      '<ul><li class="t">a</li><li class="t">b</li></ul>',
+    )
+    // No throw, no change.
+    apply(adapter, root, { tags: '.t[]' }, {})
+    assert.deepEqual(extract(adapter, root, { tags: '.t[]' }).tags, ['a', 'b'])
+  })
+
+  test(`apply [${env.label}] — @innerHTML, @textContent, @className all write via prop semantics`, () => {
+    const { adapter, root } = env.make(
+      '<div>' +
+        '<div id="html" class="old-html"><strong>old</strong></div>' +
+        '<div id="text" class="old-text"><strong>nested</strong></div>' +
+        '<div id="cls" class="x y z">old</div>' +
+        '</div>',
+    )
+    apply(adapter, root, { h: '#html@innerHTML' }, { h: '<em>new</em>' })
+    apply(adapter, root, { t: '#text@textContent' }, { t: 'flat' })
+    apply(adapter, root, { c: '#cls@className' }, { c: 'a b' })
+
+    assert.equal(extract(adapter, root, { h: '#html@innerHTML' }).h, '<em>new</em>')
+    assert.equal(extract(adapter, root, { t: '#text@textContent' }).t, 'flat')
+    assert.equal(extract(adapter, root, { c: '#cls@className' }).c, 'a b')
+  })
+
+  test(`apply [${env.label}] — @outerHTML replaces node; ctx threading lets subsequent rules see the replacement`, () => {
+    // Rule applies @outerHTML to ctx, then writes a sibling field. The
+    // second rule looks up via the new ctx (returned by applyAt threading)
+    // so it must find the replacement's children.
+    const { adapter, root } = env.make(
+      '<section id="box"><span class="lbl">old-label</span></section>',
+    )
+    const rules = {
+      box: '#box@outerHTML',
+    }
+    apply(adapter, root, rules, {
+      box: '<section id="box"><span class="lbl">new-label</span></section>',
+    })
+    // Confirm the new element is in place and re-readable.
+    assert.equal(
+      extract(adapter, root, { lbl: '.lbl' }).lbl,
+      'new-label',
+    )
+  })
+}

@@ -13,7 +13,6 @@ test('parseStrict', async (t) => {
     assert.throws(() => parseStrict('{a:".x"}'), (err) => {
       assert.ok(err instanceof RulesParseError)
       assert.match(err.message, /strict JSON/)
-      assert.match(err.message, /\?data=/)
       assert.ok(err.cause instanceof Error)
       return true
     })
@@ -63,6 +62,21 @@ test('parseRelaxed', async (t) => {
     assert.deepEqual(parseRelaxed('{first: .x:first-child}'), {
       first: '.x:first-child',
     })
+  })
+
+  await t.test('accepts trailing commas in objects and arrays', () => {
+    assert.deepEqual(parseRelaxed('{a: ".x", b: ".y",}'), { a: '.x', b: '.y' })
+    assert.deepEqual(parseRelaxed('{items: [".a", ".b",],}'), {
+      items: ['.a', '.b'],
+    })
+  })
+
+  await t.test('single-quoted strings preserve embedded double-quotes', () => {
+    assert.deepEqual(parseRelaxed(`{a: 'has "quote"'}`), { a: 'has "quote"' })
+  })
+
+  await t.test('single-quoted strings de-escape \\\' to plain \'', () => {
+    assert.deepEqual(parseRelaxed(`{a: 'it\\'s here'}`), { a: "it's here" })
   })
 
   await t.test('throws RulesParseError on malformed input', () => {

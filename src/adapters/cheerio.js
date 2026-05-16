@@ -47,10 +47,41 @@ const cheerioAdapter = {
 
   prop(node, name, value) {
     if (value === undefined) {
+      // Cheerio's .prop() doesn't expose innerHTML/textContent/className as
+      // proper properties. Route reads through the matching cheerio API so
+      // they're symmetric with the writes below (and with the DOM adapter).
+      if (name === 'innerHTML') return node.html()
+      if (name === 'textContent' || name === 'innerText') return node.text()
+      if (name === 'className') {
+        const v = node.attr('class')
+        return v !== undefined ? v : null
+      }
       const v = node.prop(name)
       return v !== undefined ? v : null
     }
+    // Cheerio's .prop() setter writes a literal attribute named `name`; it
+    // does NOT mutate the underlying property (cheerio has no live DOM).
+    // For names that have semantic write meaning, route through the right
+    // cheerio API instead.
+    const v = value == null ? '' : String(value)
+    if (name === 'innerHTML') return node.html(v)
+    if (name === 'textContent' || name === 'innerText') return node.text(v)
+    if (name === 'className') return node.attr('class', v)
     node.prop(name, value)
+  },
+
+  replaceWith(node, html) {
+    // Capture the parent + index before detaching, then reparse the html
+    // and replace. Returns a fresh cheerio wrapper around the new node so
+    // callers can keep operating on it.
+    const parent = node.parent()
+    if (!parent || !parent.length) {
+      // Detached node — nothing meaningful we can do. Mirror DOM throwing.
+      throw new Error('cheerio.replaceWith: node has no parent')
+    }
+    const idx = parent.children().index(node[0])
+    node.replaceWith(html)
+    return parent.children().eq(idx)
   },
 
   clone(node) {

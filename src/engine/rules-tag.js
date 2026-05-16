@@ -1,4 +1,4 @@
-import { parseStrict } from './rules.js'
+import { parseRelaxed } from './rules.js'
 import { UnknownRulesVersion } from './errors.js'
 
 const RULES_TAG_ID = 'hyper-html-api'
@@ -13,6 +13,10 @@ export function findRulesIn(adapter, root) {
   if (version !== SUPPORTED_VERSION) throw new UnknownRulesVersion(version)
 
   const body = adapter.text(tagNode)
-  const rules = parseStrict(body)
+  // Script tag bodies accept the same relaxed JSON syntax as the ?data=
+  // URL parameter: unquoted keys, single-quoted strings, trailing commas.
+  // parseRelaxed tries strict JSON.parse first, so valid JSON keeps
+  // parsing identically.
+  const rules = parseRelaxed(body)
   return { rules, tagNode }
 }

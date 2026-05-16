@@ -17,8 +17,6 @@
  * undo toast. Those land in `src/cms/` proper (see cms-plan.md).
  */
 
-import { DOM_PROPERTIES_SET } from '../src/engine/dom-properties.js'
-
 const BOOL_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
 /** Public entry. Returns a DocumentFragment so the caller decides where to mount. */
@@ -89,7 +87,7 @@ function buildScalarField({ rule, value, path, ctx }) {
 
   const label = document.createElement('label')
   label.className = 'field-label'
-  label.textContent = humanize(path[path.length - 1] || '.') + '  ' + ruleHint(rule)
+  label.textContent = humanize(path[path.length - 1] || '.') + ruleHint(rule)
 
   const widget = widgetFor(rule, ctx.appRoot)
   const input = makeInput(widget)
@@ -362,10 +360,7 @@ function humanize(key) {
 }
 
 function ruleHint(rule) {
-  // subtle right-aligned rule signature for the field label
-  const hint = document.createTextNode('')
-  const span = `  ·  ${rule}`
-  return span
+  return `  ·  ${rule}`
 }
 
 export { setAtPath, scaffoldFromShape, humanize }

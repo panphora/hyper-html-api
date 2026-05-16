@@ -53,25 +53,39 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
     return cloned
   })
 
+  // Remove only unmatched old nodes. Matched nodes stay attached so DOM
+  // identity (focus, observers, animations) survives the reorder.
   oldNodes.forEach((n, i) => {
     if (!used.has(i)) adapter.remove(n)
   })
 
-  used.forEach((i) => adapter.remove(oldNodes[i]))
-
+  // Place each final node at its target index. If the node is already
+  // there, do nothing (no-op apply on unchanged data drops zero state).
+  // Otherwise insertAt moves an attached node (DOM/cheerio both treat
+  // insertBefore on an attached node as "move to here").
   finalNodes.forEach((node, i) => {
-    adapter.insertAt(parent, node, anchorIdx + i)
+    const targetIdx = anchorIdx + i
+    const siblings = adapter.children(parent)
+    const currentIdx = siblings.findIndex((s) => adapter.sameNode(s, node))
+    if (currentIdx === targetIdx) return
+    adapter.insertAt(parent, node, targetIdx)
   })
 
+  // Apply per-item content. Skip when the existing value already matches
+  // — saves a write on no-op applies and avoids spurious mutation events.
   finalNodes.forEach((node, i) => {
     if (shape === null) {
       const v = newItems[i]
-      adapter.text(node, v == null ? '' : String(v))
+      const target = v == null ? '' : String(v)
+      if (adapter.text(node) !== target) adapter.text(node, target)
     } else {
-      applyItem(adapter, node, shape, newItems[i], {
+      // applyItem may replace the node (e.g. @outerHTML on the item itself);
+      // capture the return so finalNodes stays current for later passes.
+      const newNode = applyItem(adapter, node, shape, newItems[i], {
         depth: trace.depth + 1,
         path: [...trace.path, i],
       })
+      if (newNode && newNode !== node) finalNodes[i] = newNode
     }
   })
 }

@@ -1,16 +1,17 @@
 import { RulesParseError } from './errors.js'
 
 /**
- * Strict JSON parser for script-tag rules bodies.
+ * Strict JSON parser. Public export kept for callers that explicitly want
+ * strict semantics (no unquoted keys, no single quotes, no trailing
+ * commas). The script-tag path uses parseRelaxed instead — see
+ * rules-tag.js.
  */
 export function parseStrict(body) {
   try {
     return JSON.parse(body)
   } catch (e) {
     throw new RulesParseError(
-      'hyper-html-api script tags require strict JSON. ' +
-        'Relaxed JSON (unquoted keys, single quotes, trailing commas) is only supported in the ?data= URL parameter. ' +
-        `Original error: ${e.message}`,
+      `Invalid strict JSON: ${e.message}`,
       e,
     )
   }
@@ -106,6 +107,7 @@ export function parseRelaxed(queryString) {
           type: TokenType.STRING,
           value: input.substring(i + 1, j),
           quoted: true,
+          sourceQuote: quote,
         })
         i = j + 1
         continue
@@ -210,12 +212,29 @@ export function parseRelaxed(queryString) {
       }
 
       if (token.type === TokenType.COMMA) {
+        // Drop trailing commas. JSON.parse rejects them; relaxed authors
+        // expect them to work.
+        const next = tokens[i + 1]
+        if (next && (next.type === '}' || next.type === ']')) {
+          continue
+        }
         result += token.value
         continue
       }
 
       if (token.type === TokenType.STRING && token.quoted) {
-        result += `"${token.value}"`
+        let v = token.value
+        if (token.sourceQuote === "'") {
+          // Single-quoted source: \' was escaping the outer quote in the
+          // source; once we re-wrap in double quotes it's a plain '.
+          v = v.replace(/\\'/g, "'")
+          // Unescaped " inside the value needs to be \"-escaped for JSON.
+          // "Unescaped" = preceded by an even number of backslashes.
+          v = v.replace(/(\\*)"/g, (m, slashes) =>
+            slashes.length % 2 === 0 ? slashes + '\\"' : m,
+          )
+        }
+        result += `"${v}"`
         continue
       }
 

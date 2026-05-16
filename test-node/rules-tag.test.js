@@ -48,12 +48,27 @@ test('findRulesIn', async (t) => {
   })
 
   await t.test('throws RulesParseError when body is malformed', () => {
+    // Use input that's malformed even under the relaxed parser.
+    // (Unquoted keys + values like {title:h1} now parse fine.)
     const $ = load(
-      '<script type="application/hyper-html-api" id="hyper-html-api" data-rules-version="1">{title:h1}</script>',
+      '<script type="application/hyper-html-api" id="hyper-html-api" data-rules-version="1">{a:}</script>',
     )
     assert.throws(() => findRulesIn(cheerioAdapter, $.root()), (err) => {
       assert.ok(err instanceof RulesParseError)
       return true
+    })
+  })
+
+  await t.test('accepts relaxed JSON (unquoted keys, single quotes, trailing commas)', () => {
+    const $ = load(
+      '<script type="application/hyper-html-api" id="hyper-html-api" data-rules-version="1">' +
+        "{ title: 'h1', items: ['.item', { name: '.name', }], }" +
+        '</script>',
+    )
+    const result = findRulesIn(cheerioAdapter, $.root())
+    assert.deepEqual(result.rules, {
+      title: 'h1',
+      items: ['.item', { name: '.name' }],
     })
   })
 })
