@@ -27,6 +27,7 @@
   "exports": {
     ".": "./src/hyper-html-api.js",
     "./engine": "./src/engine/index.js",
+    "./cms": "./src/cms/index.js",
     "./cheerio": "./src/adapters/cheerio.js",
     "./dom": "./src/adapters/dom.js"
   },
@@ -50,6 +51,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/panphora/hyper-html-api.git"
+  },
+  "dependencies": {
+    "hyper-morph": "^0.2.0"
   },
   "devDependencies": {
     "@web/test-runner": "^0.20.0",

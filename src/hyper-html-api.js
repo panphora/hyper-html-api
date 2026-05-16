@@ -1,4 +1,5 @@
 import * as engineMod from './engine/index.js'
+import * as cmsMod from './cms/index.js'
 import * as upgradeMod from './upgrade/index.js'
 import domAdapter from './adapters/dom.js'
 
@@ -12,7 +13,13 @@ const engine = {
   DOM_PROPERTIES: engineMod.DOM_PROPERTIES,
 }
 
-const cms = {}
+const cms = {
+  buildForm: cmsMod.buildForm,
+  bindFormEvents: cmsMod.bindFormEvents,
+  scaffold: cmsMod.scaffold,
+  morphForm: cmsMod.morphForm,
+  path: cmsMod.path,
+}
 
 const upgrade = {
   registerUpgrade: upgradeMod.registerUpgrade,

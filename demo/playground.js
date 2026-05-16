@@ -1,5 +1,5 @@
 import HyperHtmlApi from '../src/hyper-html-api.js'
-import { buildForm } from './form-builder.js'
+import { buildForm, bindFormEvents, morphForm } from '../src/cms/index.js'
 import { shapeMatch, applyTransform, formatSummary } from './upgrade-runner.js'
 
 const { engine, upgrade } = HyperHtmlApi
@@ -72,6 +72,7 @@ async function init() {
   renderRules()
   renderExtract()
   renderForm()
+  ensureEventsBound()
 }
 
 function reset() {
@@ -123,11 +124,20 @@ function renderForm() {
   const frag = buildForm({
     rules: state.rules,
     data: state.data,
-    onChange: onDataChange,
     appRoot: dom.frame.contentDocument.body,
   })
-  dom.form.innerHTML = ''
-  dom.form.appendChild(frag)
+  morphForm(dom.form, frag)
+}
+
+let eventsBound = false
+function ensureEventsBound() {
+  if (eventsBound) return
+  bindFormEvents(dom.form, {
+    rules: state.rules,
+    getData: () => state.data,
+    onChange: onDataChange,
+  })
+  eventsBound = true
 }
 
 // ─ error surfacing ──────────────────────────────────────────────────
