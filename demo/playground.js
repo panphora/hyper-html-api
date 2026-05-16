@@ -72,7 +72,6 @@ async function init() {
   renderRules()
   renderExtract()
   renderForm()
-  ensureEventsBound()
 }
 
 function reset() {
@@ -127,17 +126,13 @@ function renderForm() {
     appRoot: dom.frame.contentDocument.body,
   })
   morphForm(dom.form, frag)
-}
-
-let eventsBound = false
-function ensureEventsBound() {
-  if (eventsBound) return
+  // bindFormEvents is idempotent — re-registering on every render keeps the
+  // captured `rules` reference fresh when a different fixture is loaded.
   bindFormEvents(dom.form, {
     rules: state.rules,
     getData: () => state.data,
     onChange: onDataChange,
   })
-  eventsBound = true
 }
 
 // ─ error surfacing ──────────────────────────────────────────────────

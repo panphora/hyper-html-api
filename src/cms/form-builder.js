@@ -42,29 +42,61 @@ export function buildForm({ rules, data, appRoot, cmsRoot }) {
 }
 
 /**
- * Install delegated event handlers on the form root. Call once after the
- * initial mount; subsequent morphs preserve the form root, so the
- * delegated handler survives without re-binding.
+ * Register a form root for event delegation, and ensure the global
+ * document-level dispatcher is installed.
  *
- *   formRoot — element hosting the form output (typically dom.form).
+ *   formRoot — element hosting the form output (typically dom.form). Tagged
+ *              with `data-hha-form-root` so the global dispatcher can find
+ *              the nearest registered root from any event target.
  *   rules    — the merged rule tree used to resolve object-array shapes
  *              for "+ add" actions.
  *   getData  — function returning the current data tree (must reflect
  *              the latest state, not a snapshot).
  *   onChange — (newData, { structural }) => void.
+ *
+ * Idempotent: calling twice on the same root overwrites its config. Document
+ * listeners are attached once globally and never removed (no leakage —
+ * inactive roots simply don't match the closest-ancestor lookup).
+ *
+ * Why delegate on `document` rather than on each form root:
+ *   - One handler regardless of how many CMS forms coexist on the page.
+ *   - The CMS form can be wrapped, moved, or re-parented without re-binding.
+ *   - Authors can host the form inside their own delegated handlers without
+ *     coordinating with us (events bubble past, we filter by data attribute).
  */
 export function bindFormEvents(formRoot, { rules, getData, onChange }) {
-  formRoot.addEventListener('input', (e) => handleValueEvent(e, { getData, onChange }))
-  formRoot.addEventListener('change', (e) => handleValueEvent(e, { getData, onChange }))
-  formRoot.addEventListener('click', (e) => handleClick(e, { rules, getData, onChange }))
+  formRoot.setAttribute('data-hha-form-root', '')
+  formRoots.set(formRoot, { rules, getData, onChange })
+  installDocumentListeners()
+}
+
+const formRoots = new WeakMap()
+let listenersInstalled = false
+
+function installDocumentListeners() {
+  if (listenersInstalled) return
+  document.addEventListener('input', handleValueEvent, true)
+  document.addEventListener('change', handleValueEvent, true)
+  document.addEventListener('click', handleClick, true)
+  listenersInstalled = true
+}
+
+function lookupConfig(target) {
+  if (!(target instanceof Element)) return null
+  const root = target.closest('[data-hha-form-root]')
+  return root ? formRoots.get(root) || null : null
 }
 
 // ─ delegated handlers ──────────────────────────────────────────────
 
-function handleClick(e, { rules, getData, onChange }) {
+function handleClick(e) {
+  if (!(e.target instanceof Element)) return
   const btn = e.target.closest('[data-hha-action]')
-  if (!btn || !btn.matches('[data-hha-action]')) return
+  if (!btn) return
   if (e.defaultPrevented) return
+  const config = lookupConfig(btn)
+  if (!config) return
+  const { rules, getData, onChange } = config
   const action = btn.getAttribute('data-hha-action')
   const path = pathFromString(btn.getAttribute('data-hha-path') || '')
 
@@ -93,9 +125,12 @@ function handleClick(e, { rules, getData, onChange }) {
   }
 }
 
-function handleValueEvent(e, { getData, onChange }) {
+function handleValueEvent(e) {
   const target = e.target
-  if (!target.matches?.('input, textarea, select')) return
+  if (!target?.matches?.('input, textarea, select')) return
+  const config = lookupConfig(target)
+  if (!config) return
+  const { getData, onChange } = config
   const row = target.closest('[data-hha-path]')
   if (!row) return
   const path = pathFromString(row.getAttribute('data-hha-path') || '')
@@ -200,9 +235,7 @@ function buildScalarArray({ rule, value, path, ctx }) {
     const input = document.createElement('input')
     input.type = 'text'
     input.className = 'field-input'
-    const itemValue = item == null ? '' : String(item)
-    input.setAttribute('value', itemValue)
-    input.value = itemValue
+    input.value = item == null ? '' : String(item)
 
     const remove = document.createElement('button')
     remove.type = 'button'
@@ -298,26 +331,25 @@ function buildObjectArray({ rule, value, path, ctx }) {
 function invokeWidget(widget, ctx) {
   const el = makeInput(widget)
 
-  // Values are set as ATTRIBUTES (not just properties) so hyper-morph's
-  // input-value sync recognizes them across rebuilds. The morph clears the
-  // old element's value when the new one has no `value` attribute.
+  // Values are set via PROPERTY assignment. morphForm passes
+  // `formStateSync: 'property'` to hyper-morph (see src/cms/morph.js), so
+  // attribute-driven value sync is disabled. Callers that need
+  // attribute-driven sync (e.g. hyperclay-livesync) are unaffected; this is
+  // an opt-out exposed by hyper-morph 0.3.0.
   if (widget.type === 'select' && widget.options) {
     for (const opt of widget.options) {
       const o = document.createElement('option')
-      o.setAttribute('value', opt.value)
+      o.value = opt.value
       o.textContent = opt.text
-      if (String(ctx.value) === opt.value) o.setAttribute('selected', '')
+      if (String(ctx.value) === opt.value) o.selected = true
       el.appendChild(o)
     }
   } else if (widget.type === 'checkbox') {
-    const on = ctx.value === true || ctx.value === 'true' || ctx.value === 'checked'
-    if (on) el.setAttribute('checked', '')
+    el.checked = ctx.value === true || ctx.value === 'true' || ctx.value === 'checked'
   } else if (widget.type === 'textarea') {
-    el.textContent = ctx.value == null ? '' : String(ctx.value)
+    el.value = ctx.value == null ? '' : String(ctx.value)
   } else {
-    const v = ctx.value == null ? '' : String(ctx.value)
-    el.setAttribute('value', v)
-    el.value = v
+    el.value = ctx.value == null ? '' : String(ctx.value)
   }
 
   return {

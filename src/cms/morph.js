@@ -10,6 +10,14 @@ import { widgetHandles } from './widget-handles.js'
  *                       of newFragment
  *   ignoreActiveValue:  true — never overwrite a value the user is mid-typing
  *   restoreFocus:       true — restore focus by id after the morph
+ *   formStateSync:      'property' — the form-builder authors values via
+ *                       property assignment (`el.value = …`), not via the
+ *                       `value` attribute. The default `'attribute'` mode
+ *                       exists for hyperclay-livesync, where every
+ *                       keystroke is mirrored into the `value` attribute so
+ *                       cloneNode/outerHTML captures it; that's not how the
+ *                       CMS form authors its DOM, so we ask hyper-morph to
+ *                       treat the property as authoritative instead.
  *   beforeNodeRemoved:  looks up the removed node in the shared
  *                       widgetHandles WeakMap and runs destroy() if present,
  *                       then invokes the optional caller hook
@@ -24,6 +32,7 @@ export function morphForm(formRoot, newFragment, { onWidgetRemoved } = {}) {
     morphStyle: 'innerHTML',
     ignoreActiveValue: true,
     restoreFocus: true,
+    formStateSync: 'property',
     callbacks: {
       beforeNodeRemoved(node) {
         const handle = widgetHandles.get(node)
