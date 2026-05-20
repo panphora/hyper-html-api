@@ -4,8 +4,8 @@ import * as upgradeMod from './upgrade/index.js'
 import domAdapter from './adapters/dom.js'
 
 const engine = {
-  extract: (root, rules) => engineMod.extract(domAdapter, root, rules),
-  apply: (root, rules, data) => engineMod.apply(domAdapter, root, rules, data),
+  extract: (root, rules, opts) => engineMod.extract(domAdapter, root, rules, opts),
+  apply: (root, rules, data, opts) => engineMod.apply(domAdapter, root, rules, data, opts),
   findRulesIn: (root) => engineMod.findRulesIn(domAdapter, root),
   parseStrict: engineMod.parseStrict,
   parseRelaxed: engineMod.parseRelaxed,

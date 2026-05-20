@@ -11,8 +11,8 @@ const SIMILARITY_THRESHOLD = 0.5
  * applyItem is passed in (normally `applyAt` from apply.js) to avoid a
  * circular import; object-list items use it to recursively apply their shape.
  */
-export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, applyItem) {
-  const oldNodes = adapter.find(parentCtx, selector)
+export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, applyItem, opts = {}) {
+  const oldNodes = adapter.find(parentCtx, selector, opts)
 
   if (newItems.length === 0) {
     oldNodes.forEach((n) => adapter.remove(n))
@@ -20,13 +20,18 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
   }
 
   const needsTemplate = newItems.length > oldNodes.length
-  if (needsTemplate && oldNodes.length === 0) throw new EmptyListInsert(trace.path)
+  let templateSource = oldNodes[0] || null
+  if (needsTemplate && !templateSource) {
+    templateSource = findFallbackTemplate(adapter, parentCtx, selector, opts)
+    if (!templateSource) throw new EmptyListInsert(trace.path)
+  }
 
-  const oldValues = oldNodes.map((n) => extractItem(adapter, n, shape))
+  const oldValues = oldNodes.map((n) => extractItem(adapter, n, shape, opts))
 
   let template = null
-  if (oldNodes.length > 0) {
-    template = adapter.clone(oldNodes[0])
+  if (templateSource) {
+    template = adapter.clone(templateSource)
+    if (opts.templateAttr) adapter.removeAttr(template, opts.templateAttr)
     const stripped = adapter.stripIds(template)
     if (stripped > 0) {
       // eslint-disable-next-line no-console
@@ -38,8 +43,11 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
 
   const matches = greedyMatch(newItems, oldValues, shape)
 
-  const parent = adapter.parent(oldNodes[0])
-  const anchorIdx = indexInParent(adapter, parent, oldNodes[0])
+  const referenceNode = oldNodes[0] || templateSource
+  const parent = adapter.parent(referenceNode)
+  const anchorIdx = oldNodes.length > 0
+    ? indexInParent(adapter, parent, referenceNode)
+    : 0
 
   const used = new Set()
   const finalNodes = newItems.map((_, i) => {
@@ -84,15 +92,15 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
       const newNode = applyItem(adapter, node, shape, newItems[i], {
         depth: trace.depth + 1,
         path: [...trace.path, i],
-      })
+      }, opts)
       if (newNode && newNode !== node) finalNodes[i] = newNode
     }
   })
 }
 
-function extractItem(adapter, node, shape) {
+function extractItem(adapter, node, shape, opts) {
   if (shape === null) return adapter.text(node)
-  return extract(adapter, node, shape)
+  return extract(adapter, node, shape, opts)
 }
 
 function greedyMatch(newItems, oldValues, shape) {
@@ -140,4 +148,20 @@ function indexInParent(adapter, parent, targetNode) {
     if (adapter.sameNode(siblings[i], targetNode)) return i
   }
   return -1
+}
+
+// Look for a template-marked node matching the selector. Walks up from
+// parentCtx so a template defined once in an ancestor (e.g. on a sibling
+// product's variant) is found even when the immediate container has none.
+function findFallbackTemplate(adapter, parentCtx, selector, opts) {
+  if (!opts.templateAttr) return null
+  let scope = parentCtx
+  while (scope) {
+    const candidates = adapter.find(scope, selector, { includeRulesTag: false })
+    for (const n of candidates) {
+      if (adapter.attr(n, opts.templateAttr) != null) return n
+    }
+    scope = adapter.parent(scope)
+  }
+  return null
 }

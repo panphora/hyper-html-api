@@ -15,9 +15,16 @@ const dom = {
   find(ctx, selector, opts = {}) {
     const root = resolveSearchRoot(ctx)
     if (!root || !root.querySelectorAll) return []
-    const all = Array.from(root.querySelectorAll(selector))
-    if (opts.includeRulesTag) return all
-    return all.filter((n) => !isRulesTag(n))
+    let all = Array.from(root.querySelectorAll(selector))
+    if (!opts.includeRulesTag) all = all.filter((n) => !isRulesTag(n))
+    const skipParts = []
+    if (opts.skip) skipParts.push(opts.skip)
+    if (opts.templateAttr) skipParts.push('[' + opts.templateAttr + ']')
+    if (skipParts.length) {
+      const combined = skipParts.join(', ')
+      all = all.filter((n) => !n.closest || !n.closest(combined))
+    }
+    return all
   },
 
   parent(node) {
@@ -38,6 +45,10 @@ const dom = {
       return node.hasAttribute && node.hasAttribute(name) ? node.getAttribute(name) : null
     }
     node.setAttribute(name, value)
+  },
+
+  removeAttr(node, name) {
+    if (node && node.removeAttribute) node.removeAttribute(name)
   },
 
   prop(node, name, value) {

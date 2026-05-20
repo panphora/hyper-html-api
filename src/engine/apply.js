@@ -12,27 +12,27 @@ import { listDiff } from './diff.js'
 
 const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
-export function apply(adapter, root, rules, data) {
+export function apply(adapter, root, rules, data, opts = {}) {
   const mismatches = []
   validateShape(rules, data, [], mismatches)
   if (mismatches.length) throw new ShapeMismatch(mismatches)
 
-  applyAt(adapter, root, rules, data, { depth: 0, path: [] })
+  applyAt(adapter, root, rules, data, { depth: 0, path: [] }, opts)
 }
 
 // applyAt returns the (possibly new) ctx node. Most rules don't change
 // ctx, but writes targeting `@outerHTML` on ctx itself replace the node;
 // downstream code (object-rule sub-walks, listDiff) needs to refresh its
 // pointer from the return value.
-export function applyAt(adapter, ctx, rule, value, trace) {
+export function applyAt(adapter, ctx, rule, value, trace, opts = {}) {
   if (trace.depth > MAX_RULE_DEPTH) throw new MaxRuleDepthExceeded(trace.path)
   if (value === undefined) return ctx
 
-  if (typeof rule === 'string') return applyScalar(adapter, ctx, rule, value, trace)
+  if (typeof rule === 'string') return applyScalar(adapter, ctx, rule, value, trace, opts)
 
   if (Array.isArray(rule)) {
     const [selector, shape] = rule
-    listDiff(adapter, ctx, selector, shape, value, trace, applyAt)
+    listDiff(adapter, ctx, selector, shape, value, trace, applyAt, opts)
     return ctx
   }
 
@@ -44,6 +44,7 @@ export function applyAt(adapter, ctx, rule, value, trace) {
         sub,
         value == null ? value : value[key],
         { depth: trace.depth + 1, path: [...trace.path, key] },
+        opts,
       )
       if (newCtx && newCtx !== ctx) ctx = newCtx
     }
@@ -52,10 +53,10 @@ export function applyAt(adapter, ctx, rule, value, trace) {
   return ctx
 }
 
-function applyScalar(adapter, ctx, rule, value, trace) {
+function applyScalar(adapter, ctx, rule, value, trace, opts) {
   if (rule.endsWith('[]')) {
     const selector = rule.slice(0, -2)
-    listDiff(adapter, ctx, selector, null, value, trace, applyAt)
+    listDiff(adapter, ctx, selector, null, value, trace, applyAt, opts)
     return ctx
   }
 
@@ -67,7 +68,7 @@ function applyScalar(adapter, ctx, rule, value, trace) {
     const at = rule.lastIndexOf('@')
     const selector = rule.slice(0, at)
     const name = rule.slice(at + 1)
-    const matches = selector ? adapter.find(ctx, selector) : [ctx]
+    const matches = selector ? adapter.find(ctx, selector, opts) : [ctx]
     if (matches.length === 0) return ctx
     writePropOrAttr(adapter, matches[0], name, value)
     return ctx
@@ -78,7 +79,7 @@ function applyScalar(adapter, ctx, rule, value, trace) {
     return ctx
   }
 
-  const matches = adapter.find(ctx, rule)
+  const matches = adapter.find(ctx, rule, opts)
   if (matches.length === 0) return ctx
   adapter.text(matches[0], value == null ? '' : String(value))
   return ctx

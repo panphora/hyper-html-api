@@ -1,23 +1,23 @@
 import { DOM_PROPERTIES_SET } from './dom-properties.js'
 import { MaxRuleDepthExceeded, MAX_RULE_DEPTH } from './errors.js'
 
-export function extract(adapter, root, rules) {
-  return extractAt(adapter, root, rules, { depth: 0, path: [] })
+export function extract(adapter, root, rules, opts = {}) {
+  return extractAt(adapter, root, rules, { depth: 0, path: [] }, opts)
 }
 
-function extractAt(adapter, ctx, rule, trace) {
+function extractAt(adapter, ctx, rule, trace, opts) {
   if (trace.depth > MAX_RULE_DEPTH) throw new MaxRuleDepthExceeded(trace.path)
 
-  if (typeof rule === 'string') return extractScalar(adapter, ctx, rule)
+  if (typeof rule === 'string') return extractScalar(adapter, ctx, rule, opts)
 
   if (Array.isArray(rule)) {
     const [selector, shape] = rule
-    const matches = adapter.find(ctx, selector)
+    const matches = adapter.find(ctx, selector, opts)
     return matches.map((node, i) =>
       extractAt(adapter, node, shape, {
         depth: trace.depth + 1,
         path: [...trace.path, i],
-      }),
+      }, opts),
     )
   }
 
@@ -27,7 +27,7 @@ function extractAt(adapter, ctx, rule, trace) {
       result[key] = extractAt(adapter, ctx, sub, {
         depth: trace.depth + 1,
         path: [...trace.path, key],
-      })
+      }, opts)
     }
     return result
   }
@@ -35,10 +35,10 @@ function extractAt(adapter, ctx, rule, trace) {
   return null
 }
 
-function extractScalar(adapter, ctx, rule) {
+function extractScalar(adapter, ctx, rule, opts) {
   if (rule.endsWith('[]')) {
     const selector = rule.slice(0, -2)
-    return adapter.find(ctx, selector).map((n) => adapter.text(n))
+    return adapter.find(ctx, selector, opts).map((n) => adapter.text(n))
   }
 
   if (rule.startsWith('@')) {
@@ -49,14 +49,14 @@ function extractScalar(adapter, ctx, rule) {
     const at = rule.lastIndexOf('@')
     const selector = rule.slice(0, at)
     const name = rule.slice(at + 1)
-    const matches = selector ? adapter.find(ctx, selector) : [ctx]
+    const matches = selector ? adapter.find(ctx, selector, opts) : [ctx]
     if (matches.length === 0) return null
     return readPropOrAttr(adapter, matches[0], name)
   }
 
   if (rule === '.') return adapter.text(ctx)
 
-  const matches = adapter.find(ctx, rule)
+  const matches = adapter.find(ctx, rule, opts)
   return matches.length === 0 ? null : adapter.text(matches[0])
 }
 

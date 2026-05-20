@@ -16,9 +16,16 @@ function toWrappers(cheerioSet) {
 const cheerioAdapter = {
   find(ctx, selector, opts = {}) {
     if (!ctx || !ctx.find) return []
-    const matches = toWrappers(ctx.find(selector))
-    if (opts.includeRulesTag) return matches
-    return matches.filter((n) => !isRulesTag(n))
+    let matches = toWrappers(ctx.find(selector))
+    if (!opts.includeRulesTag) matches = matches.filter((n) => !isRulesTag(n))
+    const skipParts = []
+    if (opts.skip) skipParts.push(opts.skip)
+    if (opts.templateAttr) skipParts.push('[' + opts.templateAttr + ']')
+    if (skipParts.length) {
+      const combined = skipParts.join(', ')
+      matches = matches.filter((n) => !n.closest || n.closest(combined).length === 0)
+    }
+    return matches
   },
 
   parent(node) {
@@ -43,6 +50,10 @@ const cheerioAdapter = {
       return v !== undefined ? v : null
     }
     node.attr(name, value)
+  },
+
+  removeAttr(node, name) {
+    if (node) node.removeAttr(name)
   },
 
   prop(node, name, value) {
