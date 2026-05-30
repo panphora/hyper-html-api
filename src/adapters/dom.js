@@ -1,7 +1,6 @@
-const RULES_TAG_ID = 'hyper-html-api'
-
 function isRulesTag(node) {
-  return node && node.nodeType === 1 && node.id === RULES_TAG_ID && node.tagName === 'SCRIPT'
+  return node && node.nodeType === 1 && node.tagName === 'SCRIPT'
+    && node.hasAttribute && node.hasAttribute('data-rules-name')
 }
 
 function resolveSearchRoot(ctx) {

@@ -1,10 +1,8 @@
-const RULES_TAG_ID = 'hyper-html-api'
-
 function isRulesTag(node) {
   if (!node || !node.attr) return false
-  if (node.attr('id') !== RULES_TAG_ID) return false
   const tag = node.prop ? node.prop('tagName') : ''
-  return String(tag || '').toUpperCase() === 'SCRIPT'
+  if (String(tag || '').toUpperCase() !== 'SCRIPT') return false
+  return node.attr('data-rules-name') !== undefined
 }
 
 function toWrappers(cheerioSet) {

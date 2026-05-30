@@ -6,7 +6,9 @@ import domAdapter from './adapters/dom.js'
 const engine = {
   extract: (root, rules, opts) => engineMod.extract(domAdapter, root, rules, opts),
   apply: (root, rules, data, opts) => engineMod.apply(domAdapter, root, rules, data, opts),
-  findRulesIn: (root) => engineMod.findRulesIn(domAdapter, root),
+  findRulesIn: (root, token) => engineMod.findRulesIn(domAdapter, root, token),
+  findRules: (root, source) => engineMod.resolveRules(domAdapter, root, source),
+  bind: (root, source, opts) => engineMod.bind(domAdapter, root, source, opts),
   parseStrict: engineMod.parseStrict,
   parseRelaxed: engineMod.parseRelaxed,
   errors: engineMod.errors,
