@@ -1,19 +1,6 @@
-import * as engineMod from './engine/index.js'
 import * as cmsMod from './cms/index.js'
 import * as upgradeMod from './upgrade/index.js'
-import domAdapter from './adapters/dom.js'
-
-const engine = {
-  extract: (root, rules, opts) => engineMod.extract(domAdapter, root, rules, opts),
-  apply: (root, rules, data, opts) => engineMod.apply(domAdapter, root, rules, data, opts),
-  findRulesIn: (root, token) => engineMod.findRulesIn(domAdapter, root, token),
-  findRules: (root, source) => engineMod.resolveRules(domAdapter, root, source),
-  bind: (root, source, opts) => engineMod.bind(domAdapter, root, source, opts),
-  parseStrict: engineMod.parseStrict,
-  parseRelaxed: engineMod.parseRelaxed,
-  errors: engineMod.errors,
-  DOM_PROPERTIES: engineMod.DOM_PROPERTIES,
-}
+import { engine, extractData, applyData } from './dom-api.js'
 
 const cms = {
   buildForm: cmsMod.buildForm,
@@ -39,10 +26,10 @@ if (typeof window !== 'undefined' && upgradeMod.isHelperMode(window.location)) {
   upgradeMod.bootHelper({ win: window, doc: document })
 }
 
-// Named exports ensure the IIFE namespace exposes engine/cms/upgrade as direct
-// properties on the `HyperHtmlApi` global, rather than nesting them under a
-// `.default` key the way `export default` alone would.
-export { engine, cms, upgrade }
+// Named exports ensure the IIFE namespace exposes engine/cms/upgrade and the
+// data sugar as direct properties on the `HyperHtmlApi` global, rather than
+// nesting them under a `.default` key the way `export default` alone would.
+export { engine, cms, upgrade, extractData, applyData }
 
-const HyperHtmlApi = { engine, cms, upgrade }
+const HyperHtmlApi = { engine, cms, upgrade, extractData, applyData }
 export default HyperHtmlApi

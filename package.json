@@ -9,7 +9,7 @@
     "apply",
     "CMS"
   ],
-  "version": "0.2.0",
+  "version": "0.3.0",
   "homepage": "https://github.com/panphora/hyper-html-api",
   "bugs": {
     "url": "https://github.com/panphora/hyper-html-api/issues"
@@ -29,10 +29,13 @@
     "./engine": "./src/engine/index.js",
     "./cms": "./src/cms/index.js",
     "./cheerio": "./src/adapters/cheerio.js",
-    "./dom": "./src/adapters/dom.js"
+    "./dom": "./src/adapters/dom.js",
+    "./data": "./src/data.js"
   },
   "scripts": {
     "build": "npx esbuild src/hyper-html-api.js --bundle --minify --format=iife --global-name=HyperHtmlApi --outfile=dist/hyper-html-api.min.js",
+    "build:engine": "npx esbuild src/data.js --bundle --minify --format=iife --global-name=hyperHtmlApiData --outfile=dist/hyper-html-api.engine.min.js",
+    "copy-to-hyperclayjs": "npm run build:engine && node scripts/copy-to-hyperclayjs.js",
     "prepublishOnly": "npm run build",
     "demo": "http-server . -p 5693 -c-1 -o /demo/",
     "test": "web-test-runner",
