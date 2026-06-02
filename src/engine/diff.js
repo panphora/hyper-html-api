@@ -157,7 +157,9 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
   if (!opts.templateAttr) return null
   let scope = parentCtx
   while (scope) {
-    const candidates = adapter.find(scope, selector, { includeRulesTag: false })
+    // templateAttr:null opts out of the adapter's default cms-template skip — the
+    // fallback lookup MUST see the seed element to clone it for grow-from-zero.
+    const candidates = adapter.find(scope, selector, { includeRulesTag: false, templateAttr: null })
     for (const n of candidates) {
       if (adapter.attr(n, opts.templateAttr) != null) return n
     }

@@ -18,7 +18,12 @@ const dom = {
     if (!opts.includeRulesTag) all = all.filter((n) => !isRulesTag(n))
     const skipParts = []
     if (opts.skip) skipParts.push(opts.skip)
-    if (opts.templateAttr) skipParts.push('[' + opts.templateAttr + ']')
+    // The cms-template seed marker means "not data" for EVERY consumer, so skip
+    // it by DEFAULT (not just when a caller opts in). Pass templateAttr:null to
+    // include seed elements — used by the grow-from-zero fallback lookup, which
+    // must still see the seed to clone it.
+    const tplAttr = opts.templateAttr === null ? null : (opts.templateAttr || 'cms-template')
+    if (tplAttr) skipParts.push('[' + tplAttr + ']')
     if (skipParts.length) {
       const combined = skipParts.join(', ')
       all = all.filter((n) => !n.closest || !n.closest(combined))
