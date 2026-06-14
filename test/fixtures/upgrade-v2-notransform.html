@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="hyper-source" content="/test/fixtures/upgrade-v2-notransform.html">
+  <meta name="hyper-version" content="1.1.0">
+  <script type="application/json" data-rules-name="api" data-rules-version="1">
+    {"title":"h1","products":[".product",{"name":".name","price":".price","blurb":".blurb"}]}
+  </script>
+  <script type="application/json" data-rules-name="profile" data-rules-version="1">
+    {"owner":".owner"}
+  </script>
+</head>
+<body>
+  <h1>Refreshed Store</h1>
+  <div class="products">
+    <div class="product"><span class="name">Sample</span><span class="price">$0</span><span class="blurb">fresh from v2</span></div>
+  </div>
+  <div class="owner">Nobody</div>
+</body>
+</html>

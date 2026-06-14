@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="hyper-source" content="/test/fixtures/upgrade-v2.html">
+  <meta name="hyper-version" content="2.0.0">
+  <script type="application/json" data-rules-name="api" data-rules-version="1">
+    {"heading":"h1","products":[".product",{"name":".name","price":".price","blurb":".blurb"}]}
+  </script>
+  <script type="application/json" data-rules-name="settings" data-rules-version="1">
+    {"ownerName":".owner-name"}
+  </script>
+  <script type="text/hyper-upgrade">
+    export default function upgrade(dataByName, { fromVersion, toVersion }) {
+      const api = dataByName.api || {}
+      return {
+        api: {
+          heading: api.title,
+          products: (api.products || []).map((p) => ({ name: p.name, price: p.price })),
+        },
+        settings: { ownerName: (dataByName.profile || {}).owner },
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>New Store</h1>
+  <div class="products">
+    <div class="product"><span class="name">Sample</span><span class="price">$0</span><span class="blurb">fresh from v2</span></div>
+  </div>
+  <div class="owner-name">Nobody</div>
+</body>
+</html>

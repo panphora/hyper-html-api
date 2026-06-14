@@ -49,10 +49,3 @@ export class RuleTargetReadOnly extends Error {
     this.target = name
   }
 }
-
-export class UpgradeAlreadyRegistered extends Error {
-  constructor() {
-    super('upgrade transform already registered; only one registration is allowed per page.')
-    this.name = 'UpgradeAlreadyRegistered'
-  }
-}

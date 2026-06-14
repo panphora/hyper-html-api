@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="hyper-source" content="/test/fixtures/upgrade-v2.html">
+  <meta name="hyper-version" content="1.0.0">
+  <script type="application/json" data-rules-name="api" data-rules-version="1">
+    {"title":"h1","products":[".product",{"name":".name","price":".price","sku":".sku"}]}
+  </script>
+  <script type="application/json" data-rules-name="profile" data-rules-version="1">
+    {"owner":".owner"}
+  </script>
+</head>
+<body>
+  <h1>My Store</h1>
+  <div class="products">
+    <div class="product"><span class="name">Apple</span><span class="price">$1</span><span class="sku">A1</span></div>
+    <div class="product"><span class="name">Banana</span><span class="price">$2</span><span class="sku">B2</span></div>
+    <div class="product"><span class="name">Cherry</span><span class="price">$3</span><span class="sku">C3</span></div>
+  </div>
+  <div class="owner">David</div>
+</body>
+</html>

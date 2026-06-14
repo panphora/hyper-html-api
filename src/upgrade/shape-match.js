@@ -28,6 +28,9 @@ function walk(rule, v1, summary) {
       return v1
     }
     if (v1 === undefined || v1 === null) return undefined
+    // A scalar slot can't hold an object/array from v1; leave the template
+    // default (collectDiscards counts the dropped leaves).
+    if (typeof v1 === 'object') return undefined
     summary.carriedOver++
     return v1
   }
@@ -77,7 +80,7 @@ function collectDiscards(rule, v1, summary) {
   }
 }
 
-function countScalarLeaves(v) {
+export function countScalarLeaves(v) {
   if (v === null || v === undefined) return 0
   if (Array.isArray(v)) return v.reduce((n, x) => n + countScalarLeaves(x), 0)
   if (typeof v === 'object') {

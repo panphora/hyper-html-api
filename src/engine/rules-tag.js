@@ -1,7 +1,7 @@
 import { parseRelaxed } from './rules.js'
 import { UnknownRulesVersion } from './errors.js'
 
-const SUPPORTED_VERSION = '1'
+export const SUPPORTED_VERSION = '1'
 const TOKEN_RE = /^[a-zA-Z0-9_-]+$/
 
 // findRulesIn(adapter, root)         → first script[data-rules-name] (tooling/no-token)
