@@ -38,6 +38,7 @@
     "build:engine": "npx esbuild src/data.js --bundle --minify --format=iife --global-name=hyperHtmlApiData --outfile=dist/hyper-html-api.engine.min.js",
     "build:upgrade": "npx esbuild src/upgrade.js --bundle --minify --format=iife --global-name=hyperHtmlApiUpgrade --outfile=dist/hyper-html-api.upgrade.min.js",
     "copy-to-hyperclayjs": "npm run build:engine && npm run build:upgrade && node scripts/copy-to-hyperclayjs.js",
+    "copy-to-clayjs": "npm run build:engine && node scripts/copy-to-clayjs.js",
     "prepublishOnly": "npm run build",
     "demo": "http-server . -p 5693 -c-1 -o /demo/",
     "test": "web-test-runner",
