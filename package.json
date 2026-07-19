@@ -73,5 +73,10 @@
     "mocha": "^11.0.1",
     "prettier": "^3.4.2",
     "sinon": "^9.2.4"
+  },
+  "hyper": {
+    "kind": "lib",
+    "status": "active",
+    "url": "https://github.com/panphora/hyper-html-api"
   }
 }
