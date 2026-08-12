@@ -48,14 +48,18 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
   const anchorIdx = oldNodes.length > 0
     ? indexInParent(adapter, parent, referenceNode)
     : 0
+  const contiguous = isContiguousRun(adapter, oldNodes)
 
   const used = new Set()
+  const fresh = []
   const finalNodes = newItems.map((_, i) => {
     const oldIdx = matches[i]
     if (oldIdx >= 0) {
       used.add(oldIdx)
+      fresh.push(false)
       return oldNodes[oldIdx]
     }
+    fresh.push(true)
     const cloned = adapter.clone(template)
     adapter.stripIds(cloned)
     return cloned
@@ -67,20 +71,36 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
     if (!used.has(i)) adapter.remove(n)
   })
 
-  // Place each final node at its target index. If the node is already
-  // there, do nothing (no-op apply on unchanged data drops zero state).
-  // Otherwise insertAt moves an attached node (DOM/cheerio both treat
-  // insertBefore on an attached node as "move to here").
-  finalNodes.forEach((node, i) => {
-    const targetIdx = anchorIdx + i
-    const siblings = adapter.children(parent)
-    const currentIdx = siblings.findIndex((s) => adapter.sameNode(s, node))
-    if (currentIdx === targetIdx) return
-    adapter.insertAt(parent, node, targetIdx)
-  })
+  if (contiguous) {
+    // Place each final node at its target index. If the node is already
+    // there, do nothing (no-op apply on unchanged data drops zero state).
+    // Otherwise insertAt moves an attached node (DOM/cheerio both treat
+    // insertBefore on an attached node as "move to here").
+    finalNodes.forEach((node, i) => {
+      const targetIdx = anchorIdx + i
+      const siblings = adapter.children(parent)
+      const currentIdx = siblings.findIndex((s) => adapter.sameNode(s, node))
+      if (currentIdx === targetIdx) return
+      adapter.insertAt(parent, node, targetIdx)
+    })
+    writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts)
+    return
+  }
 
-  // Apply per-item content. Skip when the existing value already matches
-  // — saves a write on no-op applies and avoids spurious mutation events.
+  // The matched nodes are not a contiguous run of siblings, so this list has no
+  // DOM order to restore: any repositioning would move elements the list does
+  // not own. Anchoring every node to parent(oldNodes[0]) is what reparents a
+  // cross-parent list into its first container and compacts past unowned
+  // siblings, and both destroy content on a write that changed nothing. Leave
+  // every surviving node exactly where the author put it and only place the
+  // grown ones.
+  placeGrownItems(adapter, finalNodes, fresh, parent, anchorIdx)
+  writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts)
+}
+
+// Apply per-item content. Skip when the existing value already matches
+// — saves a write on no-op applies and avoids spurious mutation events.
+function writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts) {
   finalNodes.forEach((node, i) => {
     if (shape === null) {
       const v = newItems[i]
@@ -166,4 +186,41 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
     scope = adapter.parent(scope)
   }
   return null
+}
+
+// Repositioning only means something when the list occupies a contiguous run of
+// element siblings under one parent. Two containers, or an unowned sibling
+// sitting between two owned nodes, has no list order to restore.
+function isContiguousRun(adapter, nodes) {
+  if (nodes.length <= 1) return true
+  const parent = adapter.parent(nodes[0])
+  if (!parent) return false
+  const siblings = adapter.children(parent)
+  const indices = []
+  for (const node of nodes) {
+    const i = siblings.findIndex((s) => adapter.sameNode(s, node))
+    if (i === -1) return false
+    indices.push(i)
+  }
+  indices.sort((a, b) => a - b)
+  return indices[indices.length - 1] - indices[0] === indices.length - 1
+}
+
+// Grown items follow the surviving node before them, so a new row lands next to
+// its neighbour rather than being teleported into the first container. With no
+// surviving node before it, fall back to where the list started.
+function placeGrownItems(adapter, finalNodes, fresh, fallbackParent, fallbackIdx) {
+  let anchor = null
+  let nextFallbackIdx = fallbackIdx
+  for (let i = 0; i < finalNodes.length; i++) {
+    if (!fresh[i]) {
+      anchor = finalNodes[i]
+      continue
+    }
+    const parent = anchor ? adapter.parent(anchor) : fallbackParent
+    if (!parent) continue
+    const at = anchor ? indexInParent(adapter, parent, anchor) + 1 : nextFallbackIdx++
+    adapter.insertAt(parent, finalNodes[i], at)
+    anchor = finalNodes[i]
+  }
 }
