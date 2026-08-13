@@ -30,6 +30,7 @@ import {
 } from './path.js'
 import { scaffold } from './scaffold.js'
 import { widgetHandles } from './widget-handles.js'
+import { splitRule } from '../engine/rule-syntax.js'
 
 const BOOL_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
@@ -367,7 +368,7 @@ function invokeWidget(widget, ctx) {
 function widgetFor(rule, appRoot) {
   let propName = null
   if (rule.startsWith('@')) propName = rule.slice(1)
-  else if (rule.includes('@')) propName = rule.split('@')[1] || null
+  else propName = splitRule(rule).prop
 
   if (propName && BOOL_PROPS.has(propName)) return { type: 'checkbox' }
   if (propName === 'innerHTML') return { type: 'textarea' }
@@ -399,7 +400,7 @@ function queryTarget(rule, appRoot) {
   if (!appRoot) return null
   if (rule === '.' || rule === '') return null
   if (rule.startsWith('@')) return null
-  const selector = rule.includes('@') ? rule.split('@')[0] : rule
+  const selector = splitRule(rule).selector
   if (!selector) return null
   try {
     return appRoot.querySelector(selector)

@@ -6,6 +6,7 @@ export { extract } from './extract.js'
 export { apply } from './apply.js'
 export { findRulesIn } from './rules-tag.js'
 export { parseStrict, parseRelaxed } from './rules.js'
+export { ruleAttrIndex, splitRule } from './rule-syntax.js'
 export * as errors from './errors.js'
 export { DOM_PROPERTIES, DOM_PROPERTIES_SET } from './dom-properties.js'
 

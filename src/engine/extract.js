@@ -1,5 +1,6 @@
 import { DOM_PROPERTIES_SET } from './dom-properties.js'
 import { MaxRuleDepthExceeded, MAX_RULE_DEPTH } from './errors.js'
+import { ruleAttrIndex } from './rule-syntax.js'
 
 export function extract(adapter, root, rules, opts = {}) {
   return extractAt(adapter, root, rules, { depth: 0, path: [] }, opts)
@@ -45,8 +46,8 @@ function extractScalar(adapter, ctx, rule, opts) {
     return readPropOrAttr(adapter, ctx, rule.slice(1))
   }
 
-  if (rule.includes('@')) {
-    const at = rule.lastIndexOf('@')
+  const at = ruleAttrIndex(rule)
+  if (at !== -1) {
     const selector = rule.slice(0, at)
     const name = rule.slice(at + 1)
     const matches = selector ? adapter.find(ctx, selector, opts) : [ctx]

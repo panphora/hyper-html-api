@@ -9,6 +9,7 @@ import {
   ShapeMismatch,
 } from './errors.js'
 import { listDiff } from './diff.js'
+import { ruleAttrIndex } from './rule-syntax.js'
 
 const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
@@ -64,8 +65,8 @@ function applyScalar(adapter, ctx, rule, value, trace, opts) {
     return writePropOrAttr(adapter, ctx, rule.slice(1), value)
   }
 
-  if (rule.includes('@')) {
-    const at = rule.lastIndexOf('@')
+  const at = ruleAttrIndex(rule)
+  if (at !== -1) {
     const selector = rule.slice(0, at)
     const name = rule.slice(at + 1)
     const matches = selector ? adapter.find(ctx, selector, opts) : [ctx]
