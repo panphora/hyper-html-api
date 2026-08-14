@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1] - 2026-08-14
+
+### Added
+- Initial hyper-html-api implementation.
+
+
+
 ## [0.5.2] - 2026-08-11
 
 ### Added
