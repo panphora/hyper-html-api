@@ -12,6 +12,11 @@ export const engine = {
   bind: (root, source, opts) => engineMod.bind(domAdapter, root, source, opts),
   parseStrict: engineMod.parseStrict,
   parseRelaxed: engineMod.parseRelaxed,
+  // Adapter-free, like the parsers above: a consumer that has to split a rule
+  // the way the engine does needs this, and reimplementing it is exactly how
+  // four copies of the split drifted apart.
+  ruleAttrIndex: engineMod.ruleAttrIndex,
+  splitRule: engineMod.splitRule,
   errors: engineMod.errors,
   DOM_PROPERTIES: engineMod.DOM_PROPERTIES,
 }

@@ -19,7 +19,7 @@
 // engine. A tokenizer bug that yields a different but still-extracting tree passes every
 // extraction comparison ever written.
 
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as cheerio from "cheerio";
@@ -177,7 +177,7 @@ for (const name of names) {
     const path = join(CASES, file);
     if (wanted.has(path) || !existsSync(path)) continue;
     if (mode === "generate") {
-      writeFileSync(path, "");
+      unlinkSync(path);
       console.log(`  removed stale ${file}`);
     } else {
       console.error(`conformance: ${file} exists but this checkout does not produce it`);

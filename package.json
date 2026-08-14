@@ -1,6 +1,6 @@
 {
   "name": "hyper-html-api",
-  "description": "self-describing data layer for HTML files — extract, apply, CMS, upgrade",
+  "description": "self-describing data layer for HTML files \u2014 extract, apply, CMS, upgrade",
   "keywords": [
     "HTML",
     "DOM",
@@ -9,7 +9,7 @@
     "apply",
     "CMS"
   ],
-  "version": "0.5.2",
+  "version": "0.6.0",
   "homepage": "https://github.com/panphora/hyper-html-api",
   "bugs": {
     "url": "https://github.com/panphora/hyper-html-api/issues"
