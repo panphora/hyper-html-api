@@ -193,6 +193,20 @@ test('apply (jsdom) — boolean prop coercion: true/false/null', () => {
   assert.equal(agreeEl.checked, false)
 })
 
+test('apply (jsdom) — boolean prop coercion: the strings "true" and "false"', () => {
+  // Form state and attribute round-trips deliver these as strings, and
+  // Boolean('false') is true: writing 'false' used to CHECK an unchecked box.
+  const { adapter, root } = jsdomCtx('<form><input id="agree" type="checkbox"></form>')
+  const rules = { agree: '#agree@checked' }
+  const agreeEl = root.getElementById('agree')
+
+  apply(adapter, root, rules, { agree: 'true' })
+  assert.equal(agreeEl.checked, true)
+
+  apply(adapter, root, rules, { agree: 'false' })
+  assert.equal(agreeEl.checked, false)
+})
+
 test('apply (jsdom) — @innerHTML write + round-trip', () => {
   const { adapter, root } = jsdomCtx('<div><div id="bio">old</div></div>')
   const rules = { bio: '#bio@innerHTML' }

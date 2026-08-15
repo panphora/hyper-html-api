@@ -45,6 +45,12 @@ describe('engine.apply (DOM adapter, real browser)', () => {
     root.querySelector('#agree').checked.should.equal(true)
     apply(domAdapter, root, rules, { agree: false })
     root.querySelector('#agree').checked.should.equal(false)
+    // Form state and attribute round-trips deliver these as strings, and
+    // Boolean('false') is true.
+    apply(domAdapter, root, rules, { agree: 'true' })
+    root.querySelector('#agree').checked.should.equal(true)
+    apply(domAdapter, root, rules, { agree: 'false' })
+    root.querySelector('#agree').checked.should.equal(false)
   })
 
   it('EmptyListInsert: empty list + new non-empty throws', () => {

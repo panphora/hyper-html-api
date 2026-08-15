@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2] - 2026-08-14
+
+### Fixed
+- Boolean props (`@checked`, `@selected`, `@disabled`, `@readOnly`, `@paused`) now read the string `"false"` as false. `Boolean("false")` is true, so a form-state or attribute round-trip delivering `"false"` checked the box instead of clearing it.
+
+
+
 ## [0.6.1] - 2026-08-14
 
 ### Added

@@ -109,7 +109,9 @@ function coercePropValue(name, value) {
   if (value === null || value === undefined) {
     return BOOLEAN_PROPS.has(name) ? false : ''
   }
-  if (BOOLEAN_PROPS.has(name)) return Boolean(value)
+  // Form state and attribute round-trips deliver booleans as strings, and
+  // Boolean("false") is true: writing "false" would CHECK an unchecked box.
+  if (BOOLEAN_PROPS.has(name)) return value === 'false' ? false : Boolean(value)
   return value
 }
 
