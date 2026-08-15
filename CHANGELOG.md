@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3] - 2026-08-15
+
+### Added
+- `hyper-html-api` package to the workspace
+
+
+
 ## [0.6.2] - 2026-08-14
 
 ### Fixed
