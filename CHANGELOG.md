@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4] - 2026-08-16
+
+### Changed
+- Updated ecosystem dependencies to their latest versions
+
+
+
 ## [0.6.3] - 2026-08-15
 
 ### Added
