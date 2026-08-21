@@ -2,7 +2,7 @@
 
 Self-describing data layer for HTML files — a bidirectional engine that reads structured data out of an HTML page and writes structured data back into it, driven by a single declarative rules tag.
 
-Runs in production behind [hyperclay](https://hyperclay.com), Hyperclay Local, and [`@panphora/hyper-cms`](https://github.com/panphora/hypercms), and is vendored into [hyperclayjs](https://github.com/panphora/hyperclayjs) and [clayjs](https://clayjs.com). The same rules run in the browser and in Node under cheerio, through a pluggable adapter.
+Runs in production behind [Hyperclay™](https://hyperclay.com), Hyperclay Local, and [`@panphora/hyper-cms`](https://github.com/panphora/hypercms), and is vendored into [hyperclayjs](https://github.com/panphora/hyperclayjs) and [clayjs](https://clayjs.com). The same rules run in the browser and in Node under cheerio, through a pluggable adapter.
 
 ## Install
 
@@ -122,4 +122,4 @@ const data = extract(cheerioAdapter, $.root(), rules)
 
 ## License
 
-0BSD
+MIT-0 (MIT No Attribution).
