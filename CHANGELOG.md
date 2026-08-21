@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.5] - 2026-08-21
+
+### Changed
+- Synced package-lock.json to the published dependency versions
+- Updated hyper-html-api package contents
+
+
+
 ## [Unreleased]
 
 ### Changed
