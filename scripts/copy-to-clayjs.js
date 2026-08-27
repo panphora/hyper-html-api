@@ -18,7 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.join(__dirname, '..')
 
 const distFile = path.join(rootDir, 'dist', 'hyper-html-api.engine.min.js')
-const clayFile = path.join(rootDir, '..', 'clayjs', 'clay-data.js')
+const clayFile = path.join(rootDir, '..', 'clayjs', 'entries', 'clay-data.js')
 
 const HEADER = `// GENERATED — do not edit. Vendored from
 // hyper-html-api/dist/hyper-html-api.engine.min.js via hyper-html-api
@@ -71,4 +71,4 @@ if (!fs.existsSync(clayDir)) {
 }
 
 fs.writeFileSync(clayFile, expected, 'utf8')
-console.log('✓ Updated clayjs/clay-data.js')
+console.log('✓ Updated clayjs/entries/clay-data.js')
