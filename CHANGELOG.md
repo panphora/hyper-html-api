@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0] - 2026-08-28
+
+### Added
+- Structural list row matching with identity lifecycle hooks
+
+### Changed
+- Update clay-data.js vendor path to clayjs/entries
+
+
+
 ## [0.7.0] - 2026-08-28
 
 ### Added
