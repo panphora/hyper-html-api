@@ -76,14 +76,26 @@ function applyScalar(adapter, ctx, rule, value, trace, opts) {
   }
 
   if (rule === '.') {
-    adapter.text(ctx, value == null ? '' : String(value))
+    writeText(adapter, ctx, value)
     return ctx
   }
 
   const matches = adapter.find(ctx, rule, opts)
   if (matches.length === 0) return ctx
-  adapter.text(matches[0], value == null ? '' : String(value))
+  writeText(adapter, matches[0], value)
   return ctx
+}
+
+// Writing identical text still replaces the text node, so an apply of unchanged
+// data emitted a childList record for every text rule on the page. The CMS
+// re-applies the whole page on each keystroke, so those records reached the undo
+// observer and live sync on every one. Scalar lists already compared before
+// writing (see writeItems); this is the same comparison for every other text
+// rule. adapter.text reads trimmed, so surrounding whitespace alone no longer
+// counts as a change, which is exactly what writeItems has always done.
+function writeText(adapter, node, value) {
+  const target = value == null ? '' : String(value)
+  if (adapter.text(node) !== target) adapter.text(node, target)
 }
 
 // Returns the (possibly new) node. For outerHTML, the original is detached

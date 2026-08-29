@@ -1,6 +1,6 @@
 {
   "name": "hyper-html-api",
-  "description": "self-describing data layer for HTML files — extract, apply, CMS, upgrade",
+  "description": "self-describing data layer for HTML files \u2014 extract, apply, CMS, upgrade",
   "keywords": [
     "HTML",
     "DOM",
@@ -9,7 +9,7 @@
     "apply",
     "CMS"
   ],
-  "version": "0.6.5",
+  "version": "0.7.0",
   "homepage": "https://github.com/panphora/hyper-html-api",
   "bugs": {
     "url": "https://github.com/panphora/hyper-html-api/issues"
@@ -40,7 +40,7 @@
     "build:upgrade": "npx esbuild src/upgrade.js --bundle --minify --format=iife --global-name=hyperHtmlApiUpgrade --outfile=dist/hyper-html-api.upgrade.min.js",
     "copy-to-hyperclayjs": "npm run build:engine && npm run build:upgrade && node scripts/copy-to-hyperclayjs.js",
     "copy-to-clayjs": "npm run build:engine && node scripts/copy-to-clayjs.js",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npm run build:engine && npm run build:upgrade",
     "demo": "http-server . -p 5693 -c-1 -o /demo/",
     "test": "web-test-runner",
     "test:debug": "web-test-runner --manual --open",

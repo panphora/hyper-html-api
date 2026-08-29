@@ -1,7 +1,6 @@
 import { EmptyListInsert } from './errors.js'
 import { extract } from './extract.js'
-
-const SIMILARITY_THRESHOLD = 0.5
+import { matchRows } from './row-match.js'
 
 /**
  * Reconcile `newItems` (array of incoming items) into the DOM subtree matched
@@ -16,6 +15,8 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
 
   if (newItems.length === 0) {
     oldNodes.forEach((n) => adapter.remove(n))
+    // Still once per list: a consumer keyed by path has to learn it settled empty.
+    callHook(opts, 'onRowsApplied', trace.path, [])
     return
   }
 
@@ -28,8 +29,11 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
 
   const oldValues = oldNodes.map((n) => extractItem(adapter, n, shape, opts))
 
+  // Only a list that grew can need a clone, because matchRows pairs every row
+  // it can. Cloning unconditionally made a plain edit strip the ids off a
+  // template it never used, and warn about it, on every keystroke.
   let template = null
-  if (templateSource) {
+  if (needsTemplate && templateSource) {
     template = adapter.clone(templateSource)
     if (opts.templateAttr) adapter.removeAttr(template, opts.templateAttr)
     const stripped = adapter.stripIds(template)
@@ -41,7 +45,7 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
     }
   }
 
-  const matches = greedyMatch(newItems, oldValues, shape)
+  const matches = matchRows(newItems, oldValues, shape, lockSuppliedRows(adapter, oldNodes, newItems, trace, opts))
 
   const referenceNode = oldNodes[0] || templateSource
   const parent = adapter.parent(referenceNode)
@@ -83,19 +87,61 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
       if (currentIdx === targetIdx) return
       adapter.insertAt(parent, node, targetIdx)
     })
-    writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts)
-    return
+  } else {
+    // The matched nodes are not a contiguous run of siblings, so this list has
+    // no DOM order to restore: any repositioning would move elements the list
+    // does not own. Anchoring every node to parent(oldNodes[0]) is what
+    // reparents a cross-parent list into its first container and compacts past
+    // unowned siblings, and both destroy content on a write that changed
+    // nothing. Leave every surviving node exactly where the author put it and
+    // only place the grown ones.
+    placeGrownItems(adapter, finalNodes, fresh, parent, anchorIdx)
   }
 
-  // The matched nodes are not a contiguous run of siblings, so this list has no
-  // DOM order to restore: any repositioning would move elements the list does
-  // not own. Anchoring every node to parent(oldNodes[0]) is what reparents a
-  // cross-parent list into its first container and compacts past unowned
-  // siblings, and both destroy content on a write that changed nothing. Leave
-  // every surviving node exactly where the author put it and only place the
-  // grown ones.
-  placeGrownItems(adapter, finalNodes, fresh, parent, anchorIdx)
   writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts)
+
+  // writeItems can replace a node (@outerHTML on the item itself) and updates
+  // finalNodes in place, so this reports the nodes the list actually ended with.
+  callHook(opts, 'onRowsApplied', trace.path, finalNodes)
+}
+
+// Consumer code runs in the middle of an engine write, and onRowsApplied runs
+// after the list is already written. Letting it throw left the page written and
+// the apply reported as failed, which in hypercms meant an error banner, a stale
+// fingerprint, and a page that no longer matched it. A hook is an optional
+// report; a broken one is the consumer's bug to see, not a reason to abandon a
+// finished write.
+function callHook(opts, name, path, arg) {
+  if (typeof opts[name] !== 'function') return undefined
+  try {
+    return opts[name](path.slice(), arg)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[hyper-html-api] ${name} threw at "${path.join('.') || '(root)'}"`, err)
+    return undefined
+  }
+}
+
+// A caller that already knows which node each incoming item belongs to can say
+// so, and content matching cannot tell two byte-identical rows apart however
+// good it gets. `identifyRows` returns an array parallel to newItems of
+// Node | null. A node that is not in this list right now is ignored, so a stale
+// handle degrades to matching rather than corrupting the list.
+function lockSuppliedRows(adapter, oldNodes, newItems, trace, opts) {
+  const supplied = callHook(opts, 'identifyRows', trace.path, newItems)
+  if (!Array.isArray(supplied)) return null
+  const locked = new Array(newItems.length).fill(-1)
+  const taken = new Set()
+  for (let i = 0; i < newItems.length; i++) {
+    if (!supplied[i]) continue
+    for (let j = 0; j < oldNodes.length; j++) {
+      if (taken.has(j) || !adapter.sameNode(oldNodes[j], supplied[i])) continue
+      locked[i] = j
+      taken.add(j)
+      break
+    }
+  }
+  return locked
 }
 
 // Apply per-item content. Skip when the existing value already matches
@@ -120,46 +166,13 @@ function writeItems(adapter, finalNodes, shape, newItems, trace, applyItem, opts
 
 function extractItem(adapter, node, shape, opts) {
   if (shape === null) return adapter.text(node)
-  return extract(adapter, node, shape, opts)
-}
-
-function greedyMatch(newItems, oldValues, shape) {
-  const matches = new Array(newItems.length).fill(-1)
-  const taken = new Set()
-  newItems.forEach((newItem, i) => {
-    let bestIdx = -1
-    let bestScore = -1
-    oldValues.forEach((oldVal, j) => {
-      if (taken.has(j)) return
-      const score = similarity(newItem, oldVal, shape)
-      const closerIdx =
-        score === bestScore && bestIdx >= 0
-          ? Math.abs(j - i) < Math.abs(bestIdx - i)
-          : false
-      if (score > bestScore || closerIdx) {
-        bestScore = score
-        bestIdx = j
-      }
-    })
-    if (bestScore >= SIMILARITY_THRESHOLD) {
-      matches[i] = bestIdx
-      taken.add(bestIdx)
-    }
-  })
-  return matches
-}
-
-function similarity(a, b, shape) {
-  if (shape === null) return a === b ? 1 : 0
-  const fields = Object.keys(shape || {})
-  if (fields.length === 0) return 0
-  let equal = 0
-  for (const f of fields) {
-    if (JSON.stringify(a == null ? undefined : a[f]) === JSON.stringify(b == null ? undefined : b[f])) {
-      equal++
-    }
-  }
-  return equal / fields.length
+  // This is a per-row read whose path restarts at the row, so a caller's
+  // onRowsRead would see a nested list under a truncated path and bind it to the
+  // wrong parent. The read hook belongs to a top-level extract only, and
+  // engine.bind() hands one opts object to both halves, so the caller cannot
+  // always keep them apart. Drop it here instead of documenting a rule the API
+  // does not let everyone follow.
+  return extract(adapter, node, shape, opts.onRowsRead ? { ...opts, onRowsRead: undefined } : opts)
 }
 
 function indexInParent(adapter, parent, targetNode) {

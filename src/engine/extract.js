@@ -9,11 +9,18 @@ export function extract(adapter, root, rules, opts = {}) {
 function extractAt(adapter, ctx, rule, trace, opts) {
   if (trace.depth > MAX_RULE_DEPTH) throw new MaxRuleDepthExceeded(trace.path)
 
-  if (typeof rule === 'string') return extractScalar(adapter, ctx, rule, opts)
+  if (typeof rule === 'string') return extractScalar(adapter, ctx, rule, trace, opts)
 
   if (Array.isArray(rule)) {
     const [selector, shape] = rule
     const matches = adapter.find(ctx, selector, opts)
+    // The read-side mirror of apply's onRowsApplied: it tells a caller which
+    // node each item came from, so identity can be established before anything
+    // is written. Only pass this to a TOP-LEVEL extract. listDiff extracts each
+    // existing row through this same function with a fresh path, so an opts
+    // carrying this hook into apply() would report nested lists under a
+    // truncated path.
+    reportRows(opts, trace, matches)
     return matches.map((node, i) =>
       extractAt(adapter, node, shape, {
         depth: trace.depth + 1,
@@ -36,10 +43,14 @@ function extractAt(adapter, ctx, rule, trace, opts) {
   return null
 }
 
-function extractScalar(adapter, ctx, rule, opts) {
+function extractScalar(adapter, ctx, rule, trace, opts) {
   if (rule.endsWith('[]')) {
     const selector = rule.slice(0, -2)
-    return adapter.find(ctx, selector, opts).map((n) => adapter.text(n))
+    const matches = adapter.find(ctx, selector, opts)
+    // A scalar list is still a list, and its rows still need identity. Reported
+    // here as well as in the tuple branch, because this one returns before it.
+    reportRows(opts, trace, matches)
+    return matches.map((n) => adapter.text(n))
   }
 
   if (rule.startsWith('@')) {
@@ -59,6 +70,18 @@ function extractScalar(adapter, ctx, rule, opts) {
 
   const matches = adapter.find(ctx, rule, opts)
   return matches.length === 0 ? null : adapter.text(matches[0])
+}
+
+// The path is copied because the caller is handed it and every nested path is
+// built from the same array. A throwing hook must not abandon the extract.
+function reportRows(opts, trace, nodes) {
+  if (typeof opts.onRowsRead !== 'function') return
+  try {
+    opts.onRowsRead(trace.path.slice(), nodes)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[hyper-html-api] onRowsRead threw at "${trace.path.join('.') || '(root)'}"`, err)
+  }
 }
 
 function readPropOrAttr(adapter, node, name) {
