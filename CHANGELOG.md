@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.1] - 2026-09-04
+
+### Fixed
+- `apply` no longer rewrites a property or attribute that already holds the value being written. Text writes have compared first for a while; property and attribute writes did not. That difference was not cosmetic: assigning `innerHTML` replaces every child node even when the string is identical, and setting an attribute to the value it already has still emits a mutation record. A caller that re-applies a whole document on every edit, which is what a CMS does on each keystroke, was tearing down every `@innerHTML` region on the page per keystroke, moving the caret out of it and restarting any embedded media inside it, and sending a record per rule to undo and live-sync listeners. Values that actually changed are written exactly as before.
+
 ## [0.8.0] - 2026-08-28
 
 ### Added

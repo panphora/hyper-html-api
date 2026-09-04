@@ -109,11 +109,20 @@ function writePropOrAttr(adapter, node, name, value) {
     const html = value == null ? '' : String(value)
     return adapter.replaceWith(node, html)
   }
+  // Compare before writing, exactly as writeText does. A property write of an
+  // identical value is not a no-op: assigning innerHTML destroys and rebuilds
+  // every child, and setting an attribute to the value it already has still
+  // emits a mutation record. The CMS re-applies the whole page on each
+  // keystroke, so without this every rich-text region on the page was torn
+  // down per keystroke (losing the caret, restarting an embedded video or
+  // iframe) and every attribute rule emitted a record to undo and live sync.
   if (DOM_PROPERTIES_WRITE_SET.has(name)) {
-    adapter.prop(node, name, coercePropValue(name, value))
+    const next = coercePropValue(name, value)
+    if (adapter.prop(node, name) !== next) adapter.prop(node, name, next)
     return node
   }
-  adapter.attr(node, name, value == null ? '' : String(value))
+  const next = value == null ? '' : String(value)
+  if (adapter.attr(node, name) !== next) adapter.attr(node, name, next)
   return node
 }
 
