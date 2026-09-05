@@ -8,7 +8,7 @@ export { findRulesIn } from './rules-tag.js'
 export { parseStrict, parseRelaxed } from './rules.js'
 export { ruleAttrIndex, splitRule } from './rule-syntax.js'
 export * as errors from './errors.js'
-export { DOM_PROPERTIES, DOM_PROPERTIES_SET } from './dom-properties.js'
+export { DOM_PROPERTIES, DOM_PROPERTIES_SET, DOM_PROPERTIES_READ_ONLY_SET } from './dom-properties.js'
 
 // source: object literal → use as-is (no tag); string → look up by token.
 // For an element root, search the whole document (root.ownerDocument) so a
