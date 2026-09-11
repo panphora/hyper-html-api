@@ -1,15 +1,26 @@
 import * as engineMod from './engine/index.js'
-import domAdapter from './adapters/dom.js'
+import domAdapter, { createDomAdapter } from './adapters/dom.js'
 
 // The DOM-bound engine: every engine call pre-wired with the DOM adapter. Lives
 // here (instead of inline in hyper-html-api.js) so both the full CDN bundle and
 // the lean `data.js` entry share one definition.
 export const engine = {
-  extract: (root, rules, opts) => engineMod.extract(domAdapter, root, rules, opts),
-  apply: (root, rules, data, opts) => engineMod.apply(domAdapter, root, rules, data, opts),
+  extract: (root, rules, opts = {}) => engineMod.extract(createDomAdapter(root, opts), root, rules, opts),
+  apply: (root, rules, data, opts = {}) => engineMod.apply(createDomAdapter(root, { ...opts, _write: true }), root, rules, data, opts),
   findRulesIn: (root, token) => engineMod.findRulesIn(domAdapter, root, token),
   findRules: (root, source) => engineMod.resolveRules(domAdapter, root, source),
-  bind: (root, source, opts) => engineMod.bind(domAdapter, root, source, opts),
+  bind: (root, source, opts = {}) => {
+    const found = engineMod.resolveRules(domAdapter, root, source)
+    if (!found) {
+      const what = typeof source === 'string' ? `data-rules-name~="${source}"` : 'the provided rules object'
+      throw new Error(`hyper-html-api: could not resolve rules for ${what}`)
+    }
+    return {
+      ...found,
+      get: () => engineMod.extract(createDomAdapter(root, opts), root, found.rules, opts),
+      set: data => engineMod.apply(createDomAdapter(root, { ...opts, _write: true }), root, found.rules, data, opts),
+    }
+  },
   parseStrict: engineMod.parseStrict,
   parseRelaxed: engineMod.parseRelaxed,
   // Adapter-free, like the parsers above: a consumer that has to split a rule
@@ -48,7 +59,7 @@ function autodetect(root) {
 export function extractData(a, b) {
   const root = isNode(a) ? a : document
   const source = isNode(a) ? b : a
-  if (source === undefined) return engineMod.extract(domAdapter, root, autodetect(root))
+  if (source === undefined) return engineMod.extract(createDomAdapter(root), root, autodetect(root))
   return engine.bind(root, source).get()
 }
 
@@ -59,7 +70,7 @@ export function applyData(root, data, source) {
   if (!isNode(root)) {
     throw new Error('hyper-html-api: applyData(root, data, source?) needs a DOM root as the first argument.')
   }
-  if (source === undefined) engineMod.apply(domAdapter, root, autodetect(root), data)
+  if (source === undefined) engineMod.apply(createDomAdapter(root), root, autodetect(root), data)
   else engine.bind(root, source).set(data)
   return root
 }

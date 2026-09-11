@@ -48,6 +48,16 @@ extracts data and `set(data)` writes it back. Token resolution is
 document-scoped, so a tag mounted in `<head>` is found even when `bind` is given
 a body or form element; `get()`/`set()` stay scoped to that element.
 
+DOM bound operations exclude `no-data` and `editor-ui` regions by default.
+Both bare attributes and `clay` tokens work, and the exclusion is inherited by
+descendants. The filtered structure is shared by selectors, text and HTML
+reads, cloning, row matching, and insertion coordinates. Writes still update
+the corresponding live authored nodes. Pass `{ exclude: '.selector' }` to add a
+consumer exclusion, or `{ exclude: null }` for an explicit raw view such as a
+CMS reading its own form controls. The generic engine remains adapter neutral.
+The Cheerio adapter rejects semantic `exclude` options because it does not yet
+implement the same structural contract.
+
 ## Upgrade
 
 A page that was copied from a template can pull in the template's newer

@@ -1,3 +1,6 @@
+import { createContentView } from '../lib/content-dom.js'
+import { capabilitySelector } from '../lib/region-capabilities.js'
+
 function isRulesTag(node) {
   return node && node.nodeType === 1 && node.tagName === 'SCRIPT'
     && node.hasAttribute && node.hasAttribute('data-rules-name')
@@ -11,6 +14,7 @@ function resolveSearchRoot(ctx) {
 }
 
 const dom = {
+  semanticExclude: true,
   find(ctx, selector, opts = {}) {
     const root = resolveSearchRoot(ctx)
     if (!root || !root.querySelectorAll) return []
@@ -108,6 +112,193 @@ const dom = {
   sameNode(a, b) {
     return a === b
   },
+}
+
+export function createDomAdapter(operationRoot, opts = {}) {
+  if (opts.exclude === null) return dom
+  const semanticSelector = [capabilitySelector('data'), opts.exclude].filter(Boolean).join(', ')
+  const searchContext = operationRoot.nodeType === 9 ? operationRoot : (operationRoot.ownerDocument || operationRoot)
+  const rootElement = operationRoot.nodeType === 9 ? operationRoot.documentElement : operationRoot
+  if (!opts._write && !rootElement?.matches?.(semanticSelector) && !rootElement?.querySelector?.(semanticSelector) &&
+      !searchContext?.querySelector?.(semanticSelector)) return dom
+  const ownerContext = operationRoot.nodeType === 9 || !operationRoot.isConnected
+    ? operationRoot
+    : operationRoot.ownerDocument
+  const outputDocument = operationRoot.nodeType === 9 ? operationRoot : operationRoot.ownerDocument
+  let view = null
+  const contentView = () => view || (view = createContentView(ownerContext, { capability: 'data', exclude: opts.exclude || null }))
+  const projected = node => {
+    const current = contentView()
+    return node === operationRoot ? current.cloneOf(operationRoot) : (current.cloneOf(node) || node)
+  }
+  const live = node => view?.original(node) || node
+  const mapParallel = (liveNode, cloneNode) => {
+    contentView().liveToClone.set(liveNode, cloneNode)
+    contentView().cloneToLive.set(cloneNode, liveNode)
+    const liveKids = liveNode.childNodes || []
+    const cloneKids = cloneNode.childNodes || []
+    for (let i = 0; i < Math.min(liveKids.length, cloneKids.length); i++) mapParallel(liveKids[i], cloneKids[i])
+  }
+  const replaceProjectedContent = (target, copy, name, value) => {
+    const included = Array.from(target.childNodes).filter(node => view.cloneOf(node))
+    const first = included[0]
+    let anchor = first
+    while (anchor && included.includes(anchor)) anchor = anchor.nextSibling
+    for (const node of included) node.remove()
+    if (name === 'innerHTML') {
+      const template = outputDocument.createElement('template')
+      template.innerHTML = value
+      for (const child of Array.from(template.content.childNodes)) target.insertBefore(child, anchor || null)
+    } else {
+      target.insertBefore(outputDocument.createTextNode(value), anchor || null)
+    }
+    const filteredView = createContentView(target, { capability: 'data', exclude: opts.exclude || null })
+    copy.replaceChildren(...Array.from(filteredView.root?.childNodes || []))
+    const mapFiltered = cloneNode => {
+      const liveNode = filteredView.original(cloneNode)
+      if (liveNode) {
+        view.liveToClone.set(liveNode, cloneNode)
+        view.cloneToLive.set(cloneNode, liveNode)
+      }
+      for (const child of Array.from(cloneNode.childNodes || [])) mapFiltered(child)
+    }
+    for (const child of Array.from(copy.childNodes)) mapFiltered(child)
+  }
+
+  const adapter = {
+    ...dom,
+    find(ctx, selector, findOpts = {}) {
+      const projectedContext = projected(ctx)
+      if (!projectedContext?.querySelectorAll) return []
+      let matches = contentView().query(selector, projectedContext)
+      if (!findOpts.includeRulesTag) matches = matches.filter(node => !isRulesTag(node))
+      const skipParts = []
+      if (findOpts.skip) skipParts.push(findOpts.skip)
+      const tplAttr = findOpts.templateAttr === null ? null : (findOpts.templateAttr || 'cms-template')
+      if (tplAttr) skipParts.push(`[${tplAttr}]`)
+      if (skipParts.length) {
+        const combined = skipParts.join(', ')
+        matches = matches.filter(node => !node.closest?.(combined))
+      }
+      return matches
+    },
+    parent(node) {
+      const result = projected(node)?.parentElement
+      return result ? live(result) : null
+    },
+    children(node) {
+      return Array.from(projected(node)?.children || [], live)
+    },
+    text(node, value) {
+      if (value === undefined) {
+        const target = live(node)
+        if (!target?.matches?.(semanticSelector) && !target?.querySelector?.(semanticSelector)) return dom.text(target)
+        return (projected(node)?.textContent || '').trim()
+      }
+      const target = live(node)
+      if (!target?.matches?.(semanticSelector) && !target?.querySelector?.(semanticSelector) && !view) {
+        dom.text(target, value)
+        return
+      }
+      const copy = contentView().cloneOf(target)
+      if (copy) replaceProjectedContent(target, copy, 'textContent', value)
+      else dom.text(target, value)
+    },
+    attr(node, name, value) {
+      const target = live(node)
+      if (value === undefined) return dom.attr(target, name)
+      dom.attr(target, name, value)
+      const copy = view?.cloneOf(target)
+      if (copy) {
+        dom.attr(copy, name, value)
+        if (createContentView(target, { capability: 'data', exclude: opts.exclude || null }).root === null) {
+          copy.remove()
+          view.liveToClone.delete(target)
+          view.cloneToLive.delete(copy)
+        }
+      }
+    },
+    removeAttr(node, name) {
+      const target = live(node)
+      dom.removeAttr(target, name)
+      const copy = view?.cloneOf(target)
+      if (copy) dom.removeAttr(copy, name)
+    },
+    prop(node, name, value) {
+      const target = live(node)
+      if (value === undefined) {
+        if (name === 'innerHTML' || name === 'outerHTML' || name === 'textContent' || name === 'innerText') {
+          return dom.prop(projected(target), name)
+        }
+        return dom.prop(target, name)
+      }
+      const semanticContent = name === 'innerHTML' || name === 'textContent' || name === 'innerText'
+      const copy = semanticContent ? contentView().cloneOf(target) : view?.cloneOf(target)
+      if (copy && semanticContent) {
+        replaceProjectedContent(target, copy, name, value)
+      } else {
+        dom.prop(target, name, value)
+        if (copy) dom.prop(copy, name, value)
+      }
+    },
+    clone(node) {
+      const copy = projected(node)
+      return copy === node ? dom.clone(node) : outputDocument.importNode(copy, true)
+    },
+    insertAt(parent, node, index) {
+      const targetParent = live(parent)
+      const contentChildren = adapter.children(targetParent)
+      const ref = contentChildren[index] || (() => {
+        for (let i = targetParent.children.length - 1; i >= 0; i--) {
+          const child = targetParent.children[i]
+          if (contentView().cloneOf(child)) return child.nextElementSibling
+        }
+        return targetParent.firstElementChild
+      })()
+      const targetNode = live(node)
+      targetParent.insertBefore(targetNode, ref || null)
+      const parentCopy = contentView().cloneOf(targetParent)
+      if (parentCopy) {
+        let nodeCopy = contentView().cloneOf(targetNode)
+        if (!nodeCopy) {
+          nodeCopy = outputDocument.importNode(targetNode, true)
+          mapParallel(targetNode, nodeCopy)
+        }
+        const copyContentChildren = Array.from(parentCopy.children)
+        parentCopy.insertBefore(nodeCopy, copyContentChildren[index] || null)
+      }
+    },
+    remove(node) {
+      const target = live(node)
+      const copy = contentView().cloneOf(target)
+      dom.remove(target)
+      if (copy) dom.remove(copy)
+    },
+    replaceWith(node, html) {
+      const target = live(node)
+      const copy = contentView().cloneOf(target)
+      const replacement = dom.replaceWith(target, html)
+      if (copy) {
+        const filteredView = createContentView(replacement, { capability: 'data', exclude: opts.exclude || null })
+        if (!filteredView.root) {
+          copy.remove()
+        } else {
+          copy.replaceWith(filteredView.root)
+          const mapFiltered = cloneNode => {
+            const liveNode = filteredView.original(cloneNode)
+            if (liveNode) {
+              view.liveToClone.set(liveNode, cloneNode)
+              view.cloneToLive.set(cloneNode, liveNode)
+            }
+            for (const child of Array.from(cloneNode.childNodes || [])) mapFiltered(child)
+          }
+          mapFiltered(filteredView.root)
+        }
+      }
+      return replacement
+    },
+  }
+  return adapter
 }
 
 export default dom

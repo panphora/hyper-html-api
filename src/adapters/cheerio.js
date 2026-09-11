@@ -12,7 +12,11 @@ function toWrappers(cheerioSet) {
 }
 
 const cheerioAdapter = {
+  semanticExclude: false,
   find(ctx, selector, opts = {}) {
+    if (Object.prototype.hasOwnProperty.call(opts, 'exclude')) {
+      throw new Error('Cheerio does not support semantic exclude queries; omit exclude or use the DOM adapter.')
+    }
     if (!ctx || !ctx.find) return []
     let matches = toWrappers(ctx.find(selector))
     if (!opts.includeRulesTag) matches = matches.filter((n) => !isRulesTag(n))

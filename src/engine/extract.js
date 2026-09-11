@@ -3,6 +3,9 @@ import { MaxRuleDepthExceeded, MAX_RULE_DEPTH } from './errors.js'
 import { ruleAttrIndex } from './rule-syntax.js'
 
 export function extract(adapter, root, rules, opts = {}) {
+  if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
+    throw new Error('This adapter does not support semantic exclude queries; omit exclude or use the DOM adapter.')
+  }
   return extractAt(adapter, root, rules, { depth: 0, path: [] }, opts)
 }
 

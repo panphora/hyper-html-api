@@ -14,6 +14,9 @@ import { ruleAttrIndex } from './rule-syntax.js'
 const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
 export function apply(adapter, root, rules, data, opts = {}) {
+  if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
+    throw new Error('This adapter does not support semantic exclude queries; omit exclude or use the DOM adapter.')
+  }
   const mismatches = []
   validateShape(rules, data, [], mismatches)
   if (mismatches.length) throw new ShapeMismatch(mismatches)
