@@ -62,7 +62,7 @@
     "url": "git+https://github.com/panphora/hyper-html-api.git"
   },
   "dependencies": {
-    "hyper-morph": "^0.5.1"
+    "hyper-morph": "^0.5.3"
   },
   "devDependencies": {
     "@web/test-runner": "^0.20.0",
