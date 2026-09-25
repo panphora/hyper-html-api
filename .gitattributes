@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Conformance cases pin exact bytes (CRLF included); never normalize them.
+conformance/cases/** -text
