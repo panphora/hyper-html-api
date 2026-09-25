@@ -130,6 +130,34 @@ const { rules } = findRulesIn(cheerioAdapter, $.root(), 'api')
 const data = extract(cheerioAdapter, $.root(), rules)
 ```
 
+### Writing content back
+
+`writeDocument` applies JSON to a document's source through its own rules tag, and
+returns the new source. It is the write half of a local data API: hyperclay-local's
+`POST /_/api/<file>` and HTML Clay's Go port both follow it, pinned by the `face: write`
+conformance cases.
+
+```js
+import { writeDocument } from 'hyper-html-api/write'
+import * as cheerio from 'cheerio'
+
+const { html, changed, spliced } = writeDocument(cheerio.load, src, { title: 'Groceries' })
+```
+
+- **Content only.** Every write goes through the policy in `conformance/write-policy.json`.
+  Text is written as text. A write refused by the policy (script and style targets,
+  `on*` handlers, `javascript:`/`vbscript:`/`data:` URLs, `@innerHTML`, `@outerHTML`, the
+  save and region markers) throws `WriteRefused`, which lists every refusal. Nothing is
+  written.
+- **Strict keys.** An unknown key or a rule whose selector matches nothing throws
+  `WriteRejected` before anything is applied. The document must have a rules tag for the
+  token (default `api`), or `NoRulesTag` is thrown.
+- **Byte-preserving.** Only the elements that changed are re-serialized and spliced into
+  the original source. The result is verified by reparsing, and when that proof fails the
+  whole document is rendered instead (`spliced: false`). A body that changes nothing
+  returns the source untouched with `changed: false`.
+- `no-data` and `editor-ui` regions are invisible to writes, as they are to reads.
+
 ## License
 
 MIT-0 (MIT No Attribution).
