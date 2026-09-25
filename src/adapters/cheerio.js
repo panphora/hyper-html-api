@@ -1,3 +1,52 @@
+import { capabilitySelector } from '../lib/region-capabilities.js'
+
+const NO_DATA = capabilitySelector('data')
+
+function isElement(node) {
+  const t = node && node[0] && node[0].type
+  return t === 'tag' || t === 'script' || t === 'style'
+}
+
+function isNoData(node) {
+  return isElement(node) && node.is(NO_DATA)
+}
+
+function hasNoData(node) {
+  return !!node && node.length > 0 && isElement(node) && (node.is(NO_DATA) || node.find(NO_DATA).length > 0)
+}
+
+function inNoData(node) {
+  return !!node && !!node.closest && node.closest(NO_DATA).length > 0
+}
+
+function projectedClone(node) {
+  const copy = node.clone()
+  copy.find(NO_DATA).remove()
+  return copy
+}
+
+function escapeText(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Mirrors dom.js replaceProjectedContent: remove only the children that are
+// not no-data, then insert the new content where the first removed child was,
+// so no-data children stay where they are.
+function replaceProjected(node, html) {
+  const contents = node.contents()
+  const all = []
+  for (let i = 0; i < contents.length; i++) all.push(contents.eq(i))
+  const included = all.filter((k) => !isNoData(k))
+  const includedSet = new Set(included.map((k) => k[0]))
+  let anchorIdx = included.length ? all.findIndex((k) => k[0] === included[0][0]) : -1
+  while (anchorIdx !== -1 && anchorIdx < all.length && includedSet.has(all[anchorIdx][0])) anchorIdx++
+  const anchor = anchorIdx === -1 || anchorIdx >= all.length ? null : all[anchorIdx]
+  for (const k of included) k.remove()
+  if (html === '') return
+  if (anchor) anchor.before(html)
+  else node.append(html)
+}
+
 function isRulesTag(node) {
   if (!node || !node.attr) return false
   const tag = node.prop ? node.prop('tagName') : ''
@@ -20,6 +69,7 @@ const cheerioAdapter = {
     if (!ctx || !ctx.find) return []
     let matches = toWrappers(ctx.find(selector))
     if (!opts.includeRulesTag) matches = matches.filter((n) => !isRulesTag(n))
+    matches = matches.filter((n) => !inNoData(n))
     const skipParts = []
     if (opts.skip) skipParts.push(opts.skip)
     // The cms-template seed marker means "not data" for EVERY consumer, so skip
@@ -43,12 +93,21 @@ const cheerioAdapter = {
 
   children(node) {
     if (!node || !node.children) return []
-    return toWrappers(node.children())
+    const kids = toWrappers(node.children())
+    return kids.some(isNoData) ? kids.filter((k) => !isNoData(k)) : kids
   },
 
   text(node, value) {
-    if (value === undefined) return node.text().trim()
-    node.text(value)
+    if (value === undefined) {
+      if (!hasNoData(node)) return node.text().trim()
+      if (isNoData(node)) return ''
+      return projectedClone(node).text().trim()
+    }
+    if (!hasNoData(node)) {
+      node.text(value)
+      return
+    }
+    replaceProjected(node, escapeText(value))
   },
 
   attr(node, name, value) {
@@ -68,8 +127,14 @@ const cheerioAdapter = {
       // Cheerio's .prop() doesn't expose innerHTML/textContent/className as
       // proper properties. Route reads through the matching cheerio API so
       // they're symmetric with the writes below (and with the DOM adapter).
-      if (name === 'innerHTML') return node.html()
-      if (name === 'textContent' || name === 'innerText') return node.text()
+      if (name === 'innerHTML') {
+        if (!hasNoData(node)) return node.html()
+        return isNoData(node) ? '' : projectedClone(node).html()
+      }
+      if (name === 'textContent' || name === 'innerText') {
+        if (!hasNoData(node)) return node.text()
+        return isNoData(node) ? '' : projectedClone(node).text()
+      }
       if (name === 'className') {
         const v = node.attr('class')
         return v !== undefined ? v : null
@@ -82,8 +147,8 @@ const cheerioAdapter = {
     // For names that have semantic write meaning, route through the right
     // cheerio API instead.
     const v = value == null ? '' : String(value)
-    if (name === 'innerHTML') return node.html(v)
-    if (name === 'textContent' || name === 'innerText') return node.text(v)
+    if (name === 'innerHTML') return hasNoData(node) ? replaceProjected(node, v) : node.html(v)
+    if (name === 'textContent' || name === 'innerText') return hasNoData(node) ? replaceProjected(node, escapeText(v)) : node.text(v)
     if (name === 'className') return node.attr('class', v)
     node.prop(name, value)
   },
@@ -103,13 +168,22 @@ const cheerioAdapter = {
   },
 
   clone(node) {
-    return node.clone()
+    return hasNoData(node) ? projectedClone(node) : node.clone()
   },
 
   insertAt(parent, node, index) {
     const siblings = parent.children()
-    if (index >= siblings.length) parent.append(node)
-    else siblings.eq(index).before(node)
+    const all = toWrappers(siblings)
+    if (!all.some(isNoData)) {
+      if (index >= siblings.length) parent.append(node)
+      else siblings.eq(index).before(node)
+      return
+    }
+    const content = all.filter((k) => !isNoData(k))
+    if (index < content.length) content[index].before(node)
+    else if (content.length) content[content.length - 1].after(node)
+    else if (all.length) all[0].before(node)
+    else parent.append(node)
   },
 
   remove(node) {

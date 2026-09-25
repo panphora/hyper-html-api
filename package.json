@@ -33,7 +33,8 @@
     "./cheerio": "./src/adapters/cheerio.js",
     "./dom": "./src/adapters/dom.js",
     "./data": "./src/data.js",
-    "./upgrade": "./src/upgrade.js"
+    "./upgrade": "./src/upgrade.js",
+    "./write": "./src/write.js"
   },
   "scripts": {
     "build": "npx esbuild src/hyper-html-api.js --bundle --minify --format=iife --global-name=HyperHtmlApi --outfile=dist/hyper-html-api.min.js",

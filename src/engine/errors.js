@@ -49,3 +49,28 @@ export class RuleTargetReadOnly extends Error {
     this.target = name
   }
 }
+
+export class WriteRefused extends Error {
+  constructor(refusals) {
+    super(`write refused: ${refusals.length} write(s) broke the content-only policy`)
+    this.name = 'WriteRefused'
+    this.refusals = refusals
+  }
+}
+
+export class NoRulesTag extends Error {
+  constructor(token) {
+    super(`no <script data-rules-name~="${token}"> rules tag in this document`)
+    this.name = 'NoRulesTag'
+    this.token = token
+  }
+}
+
+export class WriteRejected extends Error {
+  constructor(unknownKeys, unmatched) {
+    super(`write rejected: ${unknownKeys.length} unknown key(s), ${unmatched.length} rule(s) with no matching element`)
+    this.name = 'WriteRejected'
+    this.unknownKeys = unknownKeys
+    this.unmatched = unmatched
+  }
+}

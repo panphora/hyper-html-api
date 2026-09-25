@@ -25,6 +25,8 @@ import { fileURLToPath } from "node:url";
 import * as cheerio from "cheerio";
 import adapter from "../src/adapters/cheerio.js";
 import { extract, parseRelaxed, findRulesIn } from "../src/engine/index.js";
+import { writeDocument } from "../src/write.js";
+import { WRITE_POLICY } from "../src/engine/write-policy.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CASES = join(ROOT, "conformance", "cases");
@@ -39,7 +41,7 @@ if (mode !== "generate" && mode !== "check") {
 // ---------- .meta ----------
 // Flat `key: value` lines. Blank lines and # comments ignored.
 //   tier:      1 both adapters agree | 2 host-specific | 3 documented divergence
-//   face:      query (rules from .rules, as a ?data= value) | tag (rules from the document)
+//   face:      query (rules from .rules, as a ?data= value) | tag (rules from the document) | write (POST .data.json through the document's rules tag)
 //   token:     face=tag only, the data-rules-name token to look up (default "api")
 //   expect:    ok | error
 //   skip:      <host>=<reason>, repeatable
@@ -57,7 +59,7 @@ function parseMeta(text) {
     else if (key === "tier") meta.tier = Number(value);
     else meta[key] = value;
   }
-  if (!["query", "tag"].includes(meta.face)) throw new Error(`bad face: ${meta.face}`);
+  if (!["query", "tag", "write"].includes(meta.face)) throw new Error(`bad face: ${meta.face}`);
   if (!["ok", "error"].includes(meta.expect)) throw new Error(`bad expect: ${meta.expect}`);
   if (![1, 2, 3].includes(meta.tier)) throw new Error(`bad tier: ${meta.tier}`);
   return meta;
@@ -82,10 +84,50 @@ function referenceStatus(err, face) {
   return 500;
 }
 
+// ---------- write face ----------
+// A write case pins what POST /_/api/<file> does: the bytes on disk afterwards
+// (.after.html, compared byte for byte), the fresh extraction (.after.json),
+// whether anything changed and whether the splice held (.write.json), or the
+// error (.error.json, with the structured details a host puts in its body).
+const WRITE_400 = ["NoRulesTag", "WriteRejected", "WriteRefused", "ShapeMismatch", "EmptyListInsert", "UnknownRulesVersion", "RulesParseError"];
+
+function writeStatus(err) {
+  return WRITE_400.includes(err && err.name) ? 400 : 500;
+}
+
+function writeDetails(err) {
+  if (err.name === "WriteRefused") return err.refusals;
+  if (err.name === "WriteRejected") return { unknownKeys: err.unknownKeys, unmatched: err.unmatched };
+  if (err.name === "ShapeMismatch") return err.mismatches;
+  if (err.name === "EmptyListInsert") return err.path;
+  return null;
+}
+
+function runWriteCase(name, meta, html) {
+  const out = { meta, files: {} };
+  const data = JSON.parse(readFileSync(join(CASES, `${name}.data.json`), "utf8"));
+  let result;
+  try {
+    result = writeDocument(cheerio.load, html, data, { token: meta.token });
+  } catch (err) {
+    out.files[`${name}.error.json`] = stable({
+      type: err.name, message: err.message, status: writeStatus(err), details: writeDetails(err),
+    });
+    return out;
+  }
+  out.files[`${name}.after.html`] = result.html;
+  out.files[`${name}.write.json`] = stable({ changed: result.changed, spliced: result.spliced });
+  const $ = cheerio.load(result.html);
+  const found = findRulesIn(adapter, $.root(), meta.token);
+  out.files[`${name}.after.json`] = stable(extract(adapter, $.root(), found.rules));
+  return out;
+}
+
 // ---------- run one case ----------
 function runCase(name) {
   const meta = parseMeta(readFileSync(join(CASES, `${name}.meta`), "utf8"));
   const html = readFileSync(join(CASES, `${name}.html`), "utf8");
+  if (meta.face === "write") return runWriteCase(name, meta, html);
   const $ = cheerio.load(html);
   const root = $.root();
   const out = { meta, files: {} };
@@ -158,6 +200,7 @@ const manifest = stable({
 
 let failures = 0;
 const wanted = new Map([[MANIFEST, manifest]]);
+wanted.set(join(ROOT, "conformance", "write-policy.json"), stable(WRITE_POLICY));
 
 for (const name of names) {
   let result;
@@ -172,7 +215,10 @@ for (const name of names) {
 
   // An outcome file that no longer applies has to go, or a case that stops erroring keeps a
   // stale .error.json on disk and check() passes while the contract has silently moved.
-  const outcomes = [`${name}.parsed.json`, `${name}.expected.json`, `${name}.error.json`];
+  const outcomes = [
+    `${name}.parsed.json`, `${name}.expected.json`, `${name}.error.json`,
+    `${name}.after.html`, `${name}.after.json`, `${name}.write.json`,
+  ];
   for (const file of outcomes) {
     const path = join(CASES, file);
     if (wanted.has(path) || !existsSync(path)) continue;
