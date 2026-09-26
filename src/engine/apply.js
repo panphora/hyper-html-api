@@ -106,6 +106,8 @@ function writeText(adapter, node, value) {
 // For every other write, returns the original node unchanged.
 function writePropOrAttr(adapter, node, name, value) {
   if (DOM_PROPERTIES_READ_ONLY_SET.has(name)) {
+    const current = adapter.prop(node, name)
+    if (current === value || (current != null && value != null && String(current) === String(value))) return node
     throw new RuleTargetReadOnly(name)
   }
   if (name === 'outerHTML') {

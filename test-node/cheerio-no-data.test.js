@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as cheerio from 'cheerio'
-import adapter from '../src/adapters/cheerio.js'
+import adapter, { isNoDataEl } from '../src/adapters/cheerio.js'
+import { capabilitySelector } from '../src/lib/region-capabilities.js'
 import { extract, apply } from '../src/engine/index.js'
 
 test('no-data rows are invisible to list reads', () => {
@@ -79,4 +80,21 @@ test('documents with no no-data region are byte-for-byte unchanged', () => {
   const $ = cheerio.load('<ul>\n  <li>A</li>\n</ul>')
   apply(adapter, $('ul'), ['li', '.'], ['A', 'B'])
   assert.equal($.html('ul'), '<ul>\n  <li>A</li>\n<li>B</li></ul>')
+})
+
+test('isNoDataEl agrees with the NO_DATA selector', () => {
+  const NO_DATA = capabilitySelector('data')
+  const cases = [
+    ['<p no-data>', true],
+    ['<p editor-ui>', true],
+    ['<p clay="a no-data">', true],
+    ['<p clay="no-database">', false],
+    ['<p clay="editor-ui  x">', true],
+    ['<p>', false],
+  ]
+  for (const [html, expected] of cases) {
+    const node = cheerio.load(html)('p')
+    assert.equal(isNoDataEl(node[0]), node.is(NO_DATA), `${html} agrees with the selector`)
+    assert.equal(isNoDataEl(node[0]), expected, `${html} is ${expected}`)
+  }
 })

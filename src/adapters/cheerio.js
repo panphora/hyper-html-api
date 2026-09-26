@@ -1,14 +1,26 @@
 import { capabilitySelector } from '../lib/region-capabilities.js'
 
 const NO_DATA = capabilitySelector('data')
+const NO_DATA_TOKENS = ['no-data', 'editor-ui']
 
 function isElement(node) {
   const t = node && node[0] && node[0].type
   return t === 'tag' || t === 'script' || t === 'style'
 }
 
+// The same test as the NO_DATA selector, without running css-select once per sibling:
+// children() and insertAt() call it for every row of a list, and .is() made list writes quadratic
+// with a large constant.
+export function isNoDataEl(el) {
+  const attribs = el && el.attribs
+  if (!attribs) return false
+  if (NO_DATA_TOKENS.some((t) => Object.prototype.hasOwnProperty.call(attribs, t))) return true
+  const clay = attribs.clay
+  return typeof clay === 'string' && clay.split(/[\t\n\f\r ]+/).some((t) => NO_DATA_TOKENS.includes(t))
+}
+
 function isNoData(node) {
-  return isElement(node) && node.is(NO_DATA)
+  return isElement(node) && isNoDataEl(node[0])
 }
 
 function hasNoData(node) {
@@ -93,8 +105,12 @@ const cheerioAdapter = {
 
   children(node) {
     if (!node || !node.children) return []
-    const kids = toWrappers(node.children())
-    return kids.some(isNoData) ? kids.filter((k) => !isNoData(k)) : kids
+    const kids = node.children()
+    const out = []
+    for (let i = 0; i < kids.length; i++) {
+      if (!isNoDataEl(kids[i])) out.push(kids.eq(i))
+    }
+    return out
   },
 
   text(node, value) {
@@ -139,6 +155,10 @@ const cheerioAdapter = {
         const v = node.attr('class')
         return v !== undefined ? v : null
       }
+      if (name === 'type') {
+        const v = node.attr('type')
+        return v !== undefined ? v : null
+      }
       const v = node.prop(name)
       return v !== undefined ? v : null
     }
@@ -150,6 +170,7 @@ const cheerioAdapter = {
     if (name === 'innerHTML') return hasNoData(node) ? replaceProjected(node, v) : node.html(v)
     if (name === 'textContent' || name === 'innerText') return hasNoData(node) ? replaceProjected(node, escapeText(v)) : node.text(v)
     if (name === 'className') return node.attr('class', v)
+    if (name === 'type') return node.attr('type', v)
     node.prop(name, value)
   },
 
@@ -174,12 +195,12 @@ const cheerioAdapter = {
   insertAt(parent, node, index) {
     const siblings = parent.children()
     const all = toWrappers(siblings)
-    if (!all.some(isNoData)) {
+    const content = all.filter((k) => !isNoDataEl(k[0]))
+    if (content.length === all.length) {
       if (index >= siblings.length) parent.append(node)
       else siblings.eq(index).before(node)
       return
     }
-    const content = all.filter((k) => !isNoData(k))
     if (index < content.length) content[index].before(node)
     else if (content.length) content[content.length - 1].after(node)
     else if (all.length) all[0].before(node)

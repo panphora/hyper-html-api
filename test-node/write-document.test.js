@@ -121,3 +121,14 @@ test('every successful write round-trips through a full render', () => {
   ]
   for (const [input, data] of cases) assertRoundTrips(input, data, writeDocument(load, input, data))
 })
+
+test('writing 2000 rows into a one-row list stays fast', () => {
+  const html = '<script data-rules-name="api" data-rules-version="1">{items:"#u li[]"}</script><ul id=u><li>A</li></ul>'
+  const data = { items: Array.from({ length: 2000 }, (_, i) => `row ${i}`) }
+  const started = Date.now()
+  const result = writeDocument(load, html, data)
+  const elapsed = Date.now() - started
+  assert.equal(result.changed, true)
+  assert.equal(read(result.html).items.length, 2000)
+  assert.ok(elapsed < 3000, `2000-row list write took ${elapsed}ms`)
+})
