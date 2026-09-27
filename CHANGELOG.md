@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0] - 2026-09-27
+
+### Added
+- Content-only write path for the data API (writeDocument)
+- writeDocument documentation in the README
+
+### Changed
+- Depend on hyper-morph ^1.0.0
+
+### Fixed
+- Write path handling of @type, rules-tag removal, attribute names, and SVG animation
+- Conformance cases stored byte-exact so CRLF fixtures survive
+
+
+
 ## [0.8.1] - 2026-09-04
 
 ### Fixed
