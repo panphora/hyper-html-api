@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1] - 2026-09-30
+
+### Fixed
+- A descendant's own region marker is now checked on the element itself, synced from ClayJS
+
+
+
 ## [0.9.0] - 2026-09-27
 
 ### Added
