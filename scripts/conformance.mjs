@@ -41,7 +41,7 @@ if (mode !== "generate" && mode !== "check") {
 // ---------- .meta ----------
 // Flat `key: value` lines. Blank lines and # comments ignored.
 //   tier:      1 both adapters agree | 2 host-specific | 3 documented divergence
-//   face:      query (rules from .rules, as a ?data= value) | tag (rules from the document) | write (POST .data.json through the document's rules tag)
+//   face:      query (rules from .rules, as a ?data= value) | tag (rules from the document) | write (POST .data.json through the document's rules tag) | write-query (POST .data.json with caller-supplied .rules, ignoring any tag in the document)
 //   token:     face=tag only, the data-rules-name token to look up (default "api")
 //   expect:    ok | error
 //   skip:      <host>=<reason>, repeatable
@@ -59,7 +59,7 @@ function parseMeta(text) {
     else if (key === "tier") meta.tier = Number(value);
     else meta[key] = value;
   }
-  if (!["query", "tag", "write"].includes(meta.face)) throw new Error(`bad face: ${meta.face}`);
+  if (!["query", "tag", "write", "write-query"].includes(meta.face)) throw new Error(`bad face: ${meta.face}`);
   if (!["ok", "error"].includes(meta.expect)) throw new Error(`bad expect: ${meta.expect}`);
   if (![1, 2, 3].includes(meta.tier)) throw new Error(`bad tier: ${meta.tier}`);
   return meta;
@@ -107,8 +107,15 @@ function runWriteCase(name, meta, html) {
   const out = { meta, files: {} };
   const data = JSON.parse(readFileSync(join(CASES, `${name}.data.json`), "utf8"));
   let result;
+  let rules;
   try {
-    result = writeDocument(cheerio.load, html, data, { token: meta.token });
+    const options = { token: meta.token };
+    if (meta.face === "write-query") {
+      rules = parseRelaxed(readFileSync(join(CASES, `${name}.rules`), "utf8"));
+      out.files[`${name}.parsed.json`] = stable(rules);
+      options.rules = rules;
+    }
+    result = writeDocument(cheerio.load, html, data, options);
   } catch (err) {
     out.files[`${name}.error.json`] = stable({
       type: err.name, message: err.message, status: writeStatus(err), details: writeDetails(err),
@@ -118,8 +125,8 @@ function runWriteCase(name, meta, html) {
   out.files[`${name}.after.html`] = result.html;
   out.files[`${name}.write.json`] = stable({ changed: result.changed, spliced: result.spliced });
   const $ = cheerio.load(result.html);
-  const found = findRulesIn(adapter, $.root(), meta.token);
-  out.files[`${name}.after.json`] = stable(extract(adapter, $.root(), found.rules));
+  const after = meta.face === "write-query" ? rules : findRulesIn(adapter, $.root(), meta.token).rules;
+  out.files[`${name}.after.json`] = stable(extract(adapter, $.root(), after));
   return out;
 }
 
@@ -127,7 +134,7 @@ function runWriteCase(name, meta, html) {
 function runCase(name) {
   const meta = parseMeta(readFileSync(join(CASES, `${name}.meta`), "utf8"));
   const html = readFileSync(join(CASES, `${name}.html`), "utf8");
-  if (meta.face === "write") return runWriteCase(name, meta, html);
+  if (meta.face === "write" || meta.face === "write-query") return runWriteCase(name, meta, html);
   const $ = cheerio.load(html);
   const root = $.root();
   const out = { meta, files: {} };
