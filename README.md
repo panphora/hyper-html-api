@@ -132,9 +132,9 @@ const data = extract(cheerioAdapter, $.root(), rules)
 
 ### Writing content back
 
-`writeDocument` applies JSON to a document's source through its own rules tag, and
-returns the new source. It is the write half of a local data API: hyperclay-local's
-`POST /_/api/<file>` and HTML Clay's Go port both follow it, pinned by the `face: write`
+`writeDocument` applies JSON to a document's source through caller supplied rules or its
+own rules tag, and returns the new source. It is the write half of a local data API: hyperclay-local's
+`POST /_/api/<file>` and HTML Clay's Go port both follow it, pinned by the `face: write` and `face: write-query`
 conformance cases.
 
 ```js
@@ -144,14 +144,27 @@ import * as cheerio from 'cheerio'
 const { html, changed, spliced } = writeDocument(cheerio.load, src, { title: 'Groceries' })
 ```
 
+Supply `rules` to write a document without adding a mapping tag:
+
+```js
+const { html, changed } = writeDocument(
+  cheerio.load, src, { title: 'Groceries' }, { rules: { title: 'h1' } }
+)
+```
+
+The `rules` option is a parsed selector string, array, or object. Parse a relaxed JSON
+query string with `parseRelaxed` from `hyper-html-api/engine` first. Explicit rules take
+precedence over the tag, including a malformed tag. They are never saved into the document.
+An invalid explicit value throws `RulesParseError`; it never falls back to the tag.
+
 - **Content only.** Every write goes through the policy in `conformance/write-policy.json`.
   Text is written as text. A write refused by the policy (script and style targets,
   `on*` handlers, `javascript:`/`vbscript:`/`data:` URLs, `@innerHTML`, `@outerHTML`, the
   save and region markers) throws `WriteRefused`, which lists every refusal. Nothing is
   written.
 - **Strict keys.** An unknown key or a rule whose selector matches nothing throws
-  `WriteRejected` before anything is applied. The document must have a rules tag for the
-  token (default `api`), or `NoRulesTag` is thrown.
+  `WriteRejected` before anything is applied. Without `options.rules`, the document must
+  have a rules tag for the token (default `api`), or `NoRulesTag` is thrown.
 - **Byte-preserving.** Only the elements that changed are re-serialized and spliced into
   the original source. The result is verified by reparsing, and when that proof fails the
   whole document is rendered instead (`spliced: false`). A body that changes nothing
