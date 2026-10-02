@@ -4,19 +4,29 @@ import { findRulesIn } from './engine/rules-tag.js'
 import { guardAdapter } from './engine/write-policy.js'
 import { planWrite } from './engine/write-plan.js'
 import { trackAdapter, spliceDocument } from './engine/splice.js'
-import { NoRulesTag, WriteRejected } from './engine/errors.js'
+import { NoRulesTag, RulesParseError, WriteRejected } from './engine/errors.js'
 
-// Applies a JSON body to a document's source through the document's own rules
-// tag, under the content-only policy. `load` is cheerio.load, passed in so this
-// package keeps cheerio out of its browser bundles. Returns the new source and
-// whether anything changed. Throws NoRulesTag, WriteRejected, WriteRefused,
-// ShapeMismatch or EmptyListInsert, always before producing any output.
-export function writeDocument(load, src, data, { token = 'api' } = {}) {
+// Applies a JSON body to a document's source through caller-provided rules
+// (options.rules) or the document's own rules tag, under the content-only
+// policy. `load` is cheerio.load, passed in so this package keeps cheerio out
+// of its browser bundles. Returns the new source and whether anything changed.
+// Throws NoRulesTag, RulesParseError, WriteRejected, WriteRefused, ShapeMismatch
+// or EmptyListInsert, always before producing any output.
+export function writeDocument(load, src, data, options = {}) {
+  const { token = 'api' } = options
   const $ = load(src, { sourceCodeLocationInfo: true })
   const root = $.root()
-  const found = findRulesIn(cheerioAdapter, root, token)
-  if (!found) throw new NoRulesTag(token)
-  const { rules } = found
+  let rules
+  if (Object.prototype.hasOwnProperty.call(options, 'rules')) {
+    rules = options.rules
+    if (rules === null || !['string', 'object'].includes(typeof rules)) {
+      throw new RulesParseError('Invalid extraction rules: expected a selector, array, or object.')
+    }
+  } else {
+    const found = findRulesIn(cheerioAdapter, root, token)
+    if (!found) throw new NoRulesTag(token)
+    rules = found.rules
+  }
   const plan = planWrite(cheerioAdapter, root, rules, data)
   if (plan.unknownKeys.length || plan.unmatched.length) throw new WriteRejected(plan.unknownKeys, plan.unmatched)
   const tracker = trackAdapter(cheerioAdapter)

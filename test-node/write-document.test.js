@@ -4,7 +4,7 @@ import * as cheerio from 'cheerio'
 import { writeDocument } from '../src/write.js'
 import { apply, extract, findRulesIn } from '../src/engine/index.js'
 import cheerioAdapter from '../src/adapters/cheerio.js'
-import { NoRulesTag, WriteRejected, WriteRefused } from '../src/engine/errors.js'
+import { NoRulesTag, RulesParseError, WriteRejected, WriteRefused } from '../src/engine/errors.js'
 
 const load = cheerio.load
 
@@ -131,4 +131,90 @@ test('writing 2000 rows into a one-row list stays fast', () => {
   assert.equal(result.changed, true)
   assert.equal(read(result.html).items.length, 2000)
   assert.ok(elapsed < 3000, `2000-row list write took ${elapsed}ms`)
+})
+
+const PLAIN = '<!doctype html><html><head><title>Fixture</title></head><body><h1>Hello</h1><p>Keep</p></body></html>'
+const TAG_SRC = '<script data-rules-name="api" data-rules-version="1">{title:"p"}</script>'
+const TAGGED = PLAIN.replace('<head>', '<head>' + TAG_SRC)
+const BROKEN = PLAIN.replace('<head>', '<head><script data-rules-name="api" data-rules-version="2">{oops</script>')
+const SCRIPTY = '<!doctype html><html><head><title>Fixture</title></head><body><h1>Hello</h1><script id="s">var a = 1</script></body></html>'
+
+test('caller rules write through a document with no rules tag', () => {
+  const result = writeDocument(load, PLAIN, { title: 'World' }, { rules: { title: 'h1' } })
+  assert.equal(result.changed, true)
+  assert.equal(result.html, PLAIN.replace('<h1>Hello</h1>', '<h1>World</h1>'))
+  assert.ok(!result.html.includes('data-rules-name'))
+})
+
+test('caller rules writing the value already there are a byte-for-byte no-op', () => {
+  const result = writeDocument(load, PLAIN, { title: 'Hello' }, { rules: { title: 'h1' } })
+  assert.equal(result.changed, false)
+  assert.equal(result.html, PLAIN)
+})
+
+test('caller rules override the mapping in the tag', () => {
+  const result = writeDocument(load, TAGGED, { title: 'World' }, { rules: { title: 'h1' } })
+  assert.equal(result.changed, true)
+  assert.equal(result.html, TAGGED.replace('<h1>Hello</h1>', '<h1>World</h1>'))
+  assert.ok(result.html.includes(TAG_SRC))
+})
+
+test('caller rules ignore a malformed or unsupported-version tag', () => {
+  const result = writeDocument(load, BROKEN, { title: 'World' }, { rules: { title: 'h1' } })
+  assert.equal(result.changed, true)
+  assert.equal(cheerio.load(result.html)('h1').text(), 'World')
+  assert.ok(result.html.includes('{oops'))
+})
+
+test('caller rules still reject an unknown key', () => {
+  assert.throws(
+    () => writeDocument(load, PLAIN, { titel: 'X' }, { rules: { title: 'h1' } }),
+    (err) => {
+      assert.ok(err instanceof WriteRejected)
+      assert.deepEqual(err.unknownKeys, ['titel'])
+      return true
+    },
+  )
+})
+
+test('caller rules still reject a selector that matches nothing', () => {
+  assert.throws(
+    () => writeDocument(load, PLAIN, { sub: 'X' }, { rules: { sub: 'h2' } }),
+    (err) => {
+      assert.ok(err instanceof WriteRejected)
+      assert.equal(err.unmatched[0].selector, 'h2')
+      return true
+    },
+  )
+})
+
+test('caller rules cannot edit a script under the content-only policy', () => {
+  const before = SCRIPTY
+  let result
+  assert.throws(
+    () => {
+      result = writeDocument(load, before, { title: 'World', script: 'alert(1)' }, { rules: { title: 'h1', script: '#s' } })
+    },
+    (err) => {
+      assert.ok(err instanceof WriteRefused)
+      assert.equal(err.refusals.length, 1)
+      return true
+    },
+  )
+  assert.equal(result, undefined)
+  assert.equal(before, SCRIPTY)
+})
+
+test('a caller rules value that is not a selector, array or object is rejected', () => {
+  for (const rules of [null, undefined, false, 42]) {
+    assert.throws(
+      () => writeDocument(load, TAGGED, { title: 'World' }, { rules }),
+      RulesParseError,
+      `expected RulesParseError for ${String(rules)}`,
+    )
+  }
+})
+
+test('a document with no rules tag and no caller rules is still rejected', () => {
+  assert.throws(() => writeDocument(load, PLAIN, { title: 'World' }), NoRulesTag)
 })
