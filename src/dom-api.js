@@ -34,43 +34,169 @@ export const engine = {
 
 const isNode = (x) => !!x && typeof x.nodeType === 'number'
 
-// Autodetect the page's single rules tag when no `source` is given.
-// engine.findRulesIn(root) (no token) silently takes the FIRST of many tags, so
-// the sugar counts the tags itself to enforce the one-tag rule with clear,
-// distinct errors for "none" vs "multiple".
-function autodetect(root) {
-  const searchRoot = (root && root.ownerDocument) ? root.ownerDocument : root
-  const tags = domAdapter.find(searchRoot, 'script[data-rules-name]', { includeRulesTag: true })
-  if (tags.length === 0) {
-    throw new Error('hyper-html-api: no rules tag found. Add <script type="application/json" data-rules-name="…" data-rules-version="1"> or pass rules.')
-  }
-  if (tags.length > 1) {
-    throw new Error('hyper-html-api: multiple rules tags found; pass a name, e.g. extractData("api").')
-  }
-  // findRulesIn (no token) returns the one tag's rules and enforces data-rules-version="1".
-  return engineMod.findRulesIn(domAdapter, searchRoot).rules
+function defaultRules(root) {
+  const searchRoot = root && root.ownerDocument ? root.ownerDocument : root
+  const found = engineMod.findRulesIn(domAdapter, searchRoot, 'api')
+  if (!found) throw new engineMod.errors.NoRulesTag('api')
+  return found.rules
 }
 
-// extractData()                       → document + autodetect
-// extractData(el)                     → el + autodetect
+function containingTree(root) {
+  if (root.nodeType === 9) return root
+  const documentElement = root.ownerDocument?.documentElement
+  if (documentElement?.contains(root)) return documentElement
+  let tree = root
+  while (tree.parentNode) tree = tree.parentNode
+  return tree
+}
+
+function cloneContainingTree(tree) {
+  if (tree.nodeType !== 11 || !tree.host) return tree.cloneNode(true)
+  const clone = tree.ownerDocument.createDocumentFragment()
+  for (const child of tree.childNodes) clone.appendChild(child.cloneNode(true))
+  return clone
+}
+
+function childIndexPath(tree, node) {
+  const path = []
+  while (node !== tree) {
+    const parent = node.parentNode
+    path.push(Array.prototype.indexOf.call(parent.childNodes, node))
+    node = parent
+  }
+  return path.reverse()
+}
+
+function nodeAtPath(tree, path) {
+  return path.reduce((node, index) => node.childNodes[index], tree)
+}
+
+function matchingNodes(root, selector) {
+  const nodes = root.querySelectorAll ? Array.from(root.querySelectorAll(selector)) : []
+  if (root.matches?.(selector)) nodes.unshift(root)
+  return nodes
+}
+
+function copyLiveFormState(source, clone) {
+  const sourceOptions = matchingNodes(source, 'option')
+  const cloneOptions = matchingNodes(clone, 'option')
+  sourceOptions.forEach((node, index) => cloneOptions[index].selected = node.selected)
+
+  const sourceInputs = matchingNodes(source, 'input')
+  const cloneInputs = matchingNodes(clone, 'input')
+  sourceInputs.forEach((node, index) => {
+    const type = node.type.toLowerCase()
+    if (type !== 'file') cloneInputs[index].value = node.value
+    if (type === 'checkbox' || type === 'radio') cloneInputs[index].checked = node.checked
+  })
+
+  const sourceTextareas = matchingNodes(source, 'textarea')
+  const cloneTextareas = matchingNodes(clone, 'textarea')
+  sourceTextareas.forEach((node, index) => cloneTextareas[index].value = node.value)
+}
+
+function assertNoReadOnlyTargets(rule, value) {
+  if (value === undefined) return
+  if (typeof rule === 'string') {
+    if (rule.endsWith('[]')) return
+    const at = rule.startsWith('@') ? 0 : engineMod.ruleAttrIndex(rule)
+    if (at === -1) return
+    const name = rule.slice(at + 1)
+    if (engineMod.DOM_PROPERTIES_READ_ONLY_SET.has(name)) {
+      throw new engineMod.errors.RuleTargetReadOnly(name)
+    }
+    return
+  }
+  if (Array.isArray(rule)) {
+    if (!Array.isArray(value)) return
+    value.forEach(item => assertNoReadOnlyTargets(rule[1], item))
+    return
+  }
+  if (rule && typeof rule === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, subrule] of Object.entries(rule)) {
+      assertNoReadOnlyTargets(subrule, value[key])
+    }
+  }
+}
+
+function guardedApply(root, rules, data) {
+  const opts = { templateAttr: 'cms-template' }
+  const liveTree = containingTree(root)
+  const rootPath = childIndexPath(liveTree, root)
+  const detachedTree = cloneContainingTree(liveTree)
+  copyLiveFormState(liveTree, detachedTree)
+  const detachedRoot = nodeAtPath(detachedTree, rootPath)
+  const detachedAdapter = createDomAdapter(detachedTree, {
+    ...opts,
+    _write: true,
+  })
+  const plan = engineMod.planWrite(detachedAdapter, detachedRoot, rules, data, opts)
+  if (plan.unknownKeys.length || plan.unmatched.length) {
+    throw new engineMod.errors.WriteRejected(plan.unknownKeys, plan.unmatched)
+  }
+  const guarded = engineMod.guardAdapter(detachedAdapter)
+  engineMod.apply(guarded, detachedRoot, rules, data, opts)
+  guarded.assertClean()
+  assertNoReadOnlyTargets(rules, data)
+  const liveGuarded = engineMod.guardAdapter(createDomAdapter(liveTree, { ...opts, _write: true }))
+  engineMod.apply(liveGuarded, root, rules, data, opts)
+  liveGuarded.assertClean()
+}
+
+function exposeWriteError(error) {
+  if (!(error instanceof Error)) return error
+  const code = error.name || 'Error'
+  try {
+    error.code = code
+  } catch {
+    Object.defineProperty(error, 'code', { value: code, configurable: true, enumerable: true })
+  }
+  if (error instanceof engineMod.errors.WriteRefused) {
+    error.details = error.refusals
+  } else if (error instanceof engineMod.errors.WriteRejected) {
+    error.details = {
+      unknownKeys: error.unknownKeys,
+      unmatched: error.unmatched,
+    }
+  } else if (error instanceof engineMod.errors.ShapeMismatch) {
+    error.details = error.mismatches
+  } else if (Array.isArray(error.path)) {
+    error.details = { path: error.path }
+  } else if (typeof error.target === 'string') {
+    error.details = { target: error.target }
+  } else if (error.token !== undefined) {
+    error.details = { token: error.token }
+  } else if (error.version !== undefined) {
+    error.details = { version: error.version }
+  } else {
+    error.details = {}
+  }
+  return error
+}
+
+// extractData()                       → document + api rules tag
+// extractData(el)                     → el + api rules tag
 // extractData('api' | {title:'h1'})   → document + named/inline rules
 // extractData(el, 'api' | {...})      → explicit root + source
 // One-shot read; returns the extracted data.
 export function extractData(a, b) {
   const root = isNode(a) ? a : document
   const source = isNode(a) ? b : a
-  if (source === undefined) return engineMod.extract(createDomAdapter(root), root, autodetect(root))
+  if (source === undefined) return engineMod.extract(createDomAdapter(root), root, defaultRules(root))
   return engine.bind(root, source).get()
 }
 
-// applyData(root, data, source?) — writes `data` INTO the live DOM under `root`,
-// using a named/inline `source` or (when omitted) the page's single rules tag.
-// MUTATES the DOM and returns `root`.
+// applyData(root, data, source?) validates the complete write on a detached
+// clone, then repeats it against the live nodes so their identities survive.
 export function applyData(root, data, source) {
-  if (!isNode(root)) {
-    throw new Error('hyper-html-api: applyData(root, data, source?) needs a DOM root as the first argument.')
+  try {
+    if (!isNode(root)) {
+      throw new Error('hyper-html-api: applyData(root, data, source?) needs a DOM root as the first argument.')
+    }
+    const rules = source === undefined ? defaultRules(root) : engine.bind(root, source).rules
+    guardedApply(root, rules, data)
+  } catch (error) {
+    throw exposeWriteError(error)
   }
-  if (source === undefined) engineMod.apply(createDomAdapter(root), root, autodetect(root), data)
-  else engine.bind(root, source).set(data)
   return root
 }
