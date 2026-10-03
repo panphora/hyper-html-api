@@ -31,11 +31,13 @@ const WRAPPER_PREFIX = `(function () {
 const WRAPPER_SUFFIX = `
 window.clay = window.clay || {};
 window.clay.extractData = hyperHtmlApiData.extractData;
-// clayjs-level sugar: applyData(data) writes into the whole document, matching
-// extractData's root sniff. Explicit-root applyData(el, data, source?) passes through.
-window.clay.applyData = function (root, data, source) {
-  if (root && typeof root.nodeType === "number") return hyperHtmlApiData.applyData(root, data, source);
-  return hyperHtmlApiData.applyData(document, root, data);
+window.clay.applyData = function (values, optionsOrSource, source) {
+  if (values && typeof values.nodeType === "number") return hyperHtmlApiData.applyData(values, optionsOrSource, source);
+  var isObject = optionsOrSource !== null && typeof optionsOrSource === "object";
+  var proto = isObject ? Object.getPrototypeOf(optionsOrSource) : null;
+  var isOptions = isObject && (proto === Object.prototype || proto === null) && Object.prototype.hasOwnProperty.call(optionsOrSource, "rules");
+  var rules = isOptions ? optionsOrSource.rules : optionsOrSource;
+  return hyperHtmlApiData.applyData(document, values, rules == null ? undefined : rules);
 };
 window.clay.loaded = window.clay.loaded || {};
 window.clay.loaded.data = Promise.resolve();
