@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0] - 2026-10-03
+
+### Added
+- Caller-supplied rules option for writeDocument
+- Write-query conformance face and cases
+- The clayjs applyData sugar now accepts rules options
+
+### Changed
+- applyData validates writes on a cloned document before touching the live DOM
+
+### Fixed
+- File input and option state are preserved when cloning content
+
+
+
 ## [0.9.1] - 2026-09-30
 
 ### Fixed
