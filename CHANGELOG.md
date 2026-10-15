@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.1] - 2026-10-15
+
+### Changed
+- List writes now scale linearly
+- Updated content-dom.js and region-capabilities.js from ClayJS
+
+### Fixed
+- A select with an excluded option keeps its selection in the content view
+
+
+
 ## [0.10.0] - 2026-10-03
 
 ### Added
