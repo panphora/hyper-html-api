@@ -76,6 +76,18 @@ const dom = {
     parent.insertBefore(node, ref)
   },
 
+  insertBefore(ref, node) {
+    ref.parentNode.insertBefore(node, ref)
+  },
+
+  insertAfter(ref, node) {
+    ref.parentNode.insertBefore(node, ref.nextSibling)
+  },
+
+  identity(node) {
+    return node || null
+  },
+
   remove(node) {
     if (node && node.parentNode) node.parentNode.removeChild(node)
   },
@@ -267,6 +279,41 @@ export function createDomAdapter(operationRoot, opts = {}) {
         const copyContentChildren = Array.from(parentCopy.children)
         parentCopy.insertBefore(nodeCopy, copyContentChildren[index] || null)
       }
+    },
+    insertBefore(ref, node) {
+      const targetRef = live(ref)
+      const targetNode = live(node)
+      targetRef.parentNode.insertBefore(targetNode, targetRef)
+      const parentCopy = contentView().cloneOf(targetRef.parentNode)
+      if (parentCopy) {
+        let nodeCopy = contentView().cloneOf(targetNode)
+        if (!nodeCopy) {
+          nodeCopy = outputDocument.importNode(targetNode, true)
+          mapParallel(targetNode, nodeCopy)
+        }
+        const refCopy = contentView().cloneOf(targetRef)
+        if (refCopy) refCopy.before(nodeCopy)
+        else parentCopy.appendChild(nodeCopy)
+      }
+    },
+    insertAfter(ref, node) {
+      const targetRef = live(ref)
+      const targetNode = live(node)
+      targetRef.parentNode.insertBefore(targetNode, targetRef.nextSibling)
+      const parentCopy = contentView().cloneOf(targetRef.parentNode)
+      if (parentCopy) {
+        let nodeCopy = contentView().cloneOf(targetNode)
+        if (!nodeCopy) {
+          nodeCopy = outputDocument.importNode(targetNode, true)
+          mapParallel(targetNode, nodeCopy)
+        }
+        const refCopy = contentView().cloneOf(targetRef)
+        if (refCopy) refCopy.after(nodeCopy)
+        else parentCopy.appendChild(nodeCopy)
+      }
+    },
+    identity(node) {
+      return live(node) || null
     },
     remove(node) {
       const target = live(node)

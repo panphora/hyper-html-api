@@ -76,17 +76,7 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
   })
 
   if (contiguous) {
-    // Place each final node at its target index. If the node is already
-    // there, do nothing (no-op apply on unchanged data drops zero state).
-    // Otherwise insertAt moves an attached node (DOM/cheerio both treat
-    // insertBefore on an attached node as "move to here").
-    finalNodes.forEach((node, i) => {
-      const targetIdx = anchorIdx + i
-      const siblings = adapter.children(parent)
-      const currentIdx = siblings.findIndex((s) => adapter.sameNode(s, node))
-      if (currentIdx === targetIdx) return
-      adapter.insertAt(parent, node, targetIdx)
-    })
+    placeContiguous(adapter, parent, anchorIdx, finalNodes, fresh)
   } else {
     // The matched nodes are not a contiguous run of siblings, so this list has
     // no DOM order to restore: any repositioning would move elements the list
@@ -132,14 +122,13 @@ function lockSuppliedRows(adapter, oldNodes, newItems, trace, opts) {
   if (!Array.isArray(supplied)) return null
   const locked = new Array(newItems.length).fill(-1)
   const taken = new Set()
+  const position = new Map(oldNodes.map((n, j) => [adapter.identity(n), j]))
   for (let i = 0; i < newItems.length; i++) {
     if (!supplied[i]) continue
-    for (let j = 0; j < oldNodes.length; j++) {
-      if (taken.has(j) || !adapter.sameNode(oldNodes[j], supplied[i])) continue
-      locked[i] = j
-      taken.add(j)
-      break
-    }
+    const j = position.get(adapter.identity(supplied[i]))
+    if (j === undefined || taken.has(j)) continue
+    locked[i] = j
+    taken.add(j)
   }
   return locked
 }
@@ -201,6 +190,49 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
   return null
 }
 
+// Puts finalNodes at anchorIdx onward among the parent's content children and leaves every other
+// child in its order. A node already in place is not touched, so an unchanged apply moves nothing.
+// The children are read once and each move is mirrored in a local copy: reading them per row, as
+// this used to, made a list write cost the square of its length.
+//
+// Every surviving node sits at or after its target when its turn comes, because the run started at
+// anchorIdx and the earlier targets are already filled. So removing a node from the copy never
+// shifts the target it is moving to.
+function placeContiguous(adapter, parent, anchorIdx, finalNodes, fresh) {
+  const siblings = adapter.children(parent)
+  const order = siblings.map((s) => adapter.identity(s))
+  // Past the end of the content children, insertAt appends to the very end of the
+  // parent when the parent has no no-data child, which is past any trailing text:
+  // "after the last content child" is NOT what it does there, and the document
+  // has to come out byte-identical. So the first row that lands past the end still
+  // goes through insertAt, and the rows after it follow that node, which is now
+  // the parent's last child. Only one row ever pays for the index insert, because
+  // the targets only move forward and the local copy grows with them.
+  let appended = false
+  finalNodes.forEach((node, i) => {
+    const id = adapter.identity(node)
+    const target = anchorIdx + i
+    if (order[target] === id) return
+    if (!fresh[i]) {
+      const current = order.indexOf(id)
+      if (current !== -1) {
+        order.splice(current, 1)
+        siblings.splice(current, 1)
+      }
+    }
+    const at = Math.min(target, siblings.length)
+    if (at < siblings.length) adapter.insertBefore(siblings[at], node)
+    else if (!siblings.length) adapter.insertAt(parent, node, 0)
+    else if (appended) adapter.insertAfter(siblings[siblings.length - 1], node)
+    else {
+      adapter.insertAt(parent, node, target)
+      appended = true
+    }
+    order.splice(at, 0, id)
+    siblings.splice(at, 0, node)
+  })
+}
+
 // Repositioning only means something when the list occupies a contiguous run of
 // element siblings under one parent. Two containers, or an unowned sibling
 // sitting between two owned nodes, has no list order to restore.
@@ -208,11 +240,11 @@ function isContiguousRun(adapter, nodes) {
   if (nodes.length <= 1) return true
   const parent = adapter.parent(nodes[0])
   if (!parent) return false
-  const siblings = adapter.children(parent)
+  const position = new Map(adapter.children(parent).map((s, i) => [adapter.identity(s), i]))
   const indices = []
   for (const node of nodes) {
-    const i = siblings.findIndex((s) => adapter.sameNode(s, node))
-    if (i === -1) return false
+    const i = position.get(adapter.identity(node))
+    if (i === undefined) return false
     indices.push(i)
   }
   indices.sort((a, b) => a - b)

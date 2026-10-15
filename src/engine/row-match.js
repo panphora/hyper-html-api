@@ -76,7 +76,8 @@ export function matchRows(newItems, oldValues, shape, locked) {
   // Changed content outranks displacement: the scale is larger than any total
   // displacement this list can produce, so position only ever breaks a tie.
   const scale = n * m + 1
-  const cost = (i, j) => differingFields(newItems[i], oldValues[j], shape) * scale + Math.abs(i - j)
+  const differing = fieldDistance(newItems, oldValues, shape)
+  const cost = (i, j) => differing(i, j) * scale + Math.abs(i - j)
   for (const [i, j] of alignInOrder(leftNew, leftOld, cost)) matches[i] = j
   return matches
 }
@@ -97,17 +98,22 @@ function itemKey(item, shape) {
   )
 }
 
-function differingFields(a, b, shape) {
-  if (!isObjectShape(shape)) return a === b ? 0 : 1
+// How many fields differ between new item i and old item j. Each item's fields are encoded once
+// here: the alignment table asks this for every pair, and encoding per pair made it the dominant
+// cost of a large list.
+function fieldDistance(newItems, oldValues, shape) {
+  if (!isObjectShape(shape)) return (i, j) => (newItems[i] === oldValues[j] ? 0 : 1)
   const fields = Object.keys(shape)
-  if (fields.length === 0) return 0
-  let differing = 0
-  for (const f of fields) {
-    const av = JSON.stringify(a == null ? undefined : a[f])
-    const bv = JSON.stringify(b == null ? undefined : b[f])
-    if (av !== bv) differing++
+  const encode = (item) => fields.map((f) => JSON.stringify(item == null ? undefined : item[f]))
+  const newCodes = newItems.map(encode)
+  const oldCodes = oldValues.map(encode)
+  return (i, j) => {
+    const a = newCodes[i]
+    const b = oldCodes[j]
+    let differing = 0
+    for (let k = 0; k < fields.length; k++) if (a[k] !== b[k]) differing++
+    return differing
   }
-  return differing
 }
 
 // Pair every entry of the shorter list with one of the longer, keeping both in

@@ -207,6 +207,18 @@ const cheerioAdapter = {
     else parent.append(node)
   },
 
+  insertBefore(ref, node) {
+    ref.before(node)
+  },
+
+  insertAfter(ref, node) {
+    ref.after(node)
+  },
+
+  identity(node) {
+    return node && node[0] ? node[0] : null
+  },
+
   remove(node) {
     if (node) node.remove()
   },

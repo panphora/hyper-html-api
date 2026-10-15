@@ -54,6 +54,20 @@ export function trackAdapter(adapter) {
       if (from) mark(from)
       return adapter.insertAt(parent, node, index)
     },
+    insertBefore(ref, node) {
+      const p = adapter.parent(ref)
+      if (p) mark(p)
+      const from = adapter.parent(node)
+      if (from) mark(from)
+      return adapter.insertBefore(ref, node)
+    },
+    insertAfter(ref, node) {
+      const p = adapter.parent(ref)
+      if (p) mark(p)
+      const from = adapter.parent(node)
+      if (from) mark(from)
+      return adapter.insertAfter(ref, node)
+    },
     remove(node) {
       const p = adapter.parent(node)
       if (p) mark(p)
