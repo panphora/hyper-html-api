@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as cheerio from 'cheerio'
+import { JSDOM } from 'jsdom'
 import cheerioAdapter from '../src/adapters/cheerio.js'
-import { extract, findRulesIn } from '../src/engine/index.js'
+import domAdapter from '../src/adapters/dom.js'
+import { apply, extract, findRulesIn } from '../src/engine/index.js'
 import { WriteNotRoundTripped } from '../src/engine/errors.js'
 import { writeDocument } from '../src/write.js'
 
@@ -156,6 +158,29 @@ test('a leading newline the parser drops after pre/textarea is accepted', () => 
   assert.equal(result.changed, true)
   assert.equal(read(result.html).pre, 'line1')
   assert.equal(read(result.html).ta, 'hello')
+})
+
+test('the leading-newline allowance follows the matched element, not the selector text', () => {
+  const html = '<pre id="code"></pre><textarea id="note"></textarea>'
+  const rules = { code: '#code@textContent', note: '#note@textContent' }
+  const result = writeDocument(load, html, { code: '\nhello', note: '\nworld' }, { rules })
+
+  assert.equal(result.changed, true)
+  assert.ok(result.html.includes('<pre id="code">\nhello</pre>'))
+  assert.deepEqual(extract(cheerioAdapter, cheerio.load(result.html).root(), rules), {
+    code: 'hello',
+    note: 'world',
+  })
+})
+
+test('the DOM adapter keeps the leading newline an ID-selected pre takes', () => {
+  const document = new JSDOM('<pre id="code"></pre>').window.document
+  const rules = { code: '#code@textContent' }
+
+  apply(domAdapter, document, rules, { code: '\nhello' }, { templateAttr: 'cms-template' })
+
+  assert.equal(document.getElementById('code').textContent, '\nhello')
+  assert.deepEqual(extract(domAdapter, document, rules, {}), { code: '\nhello' })
 })
 
 test('a selector that depends on the value being written is still refused', () => {

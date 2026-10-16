@@ -84,6 +84,23 @@ for (const env of envs) {
     )
   })
 
+  test(`${env.label}: a cloned row’s checkbox keeps no value attribute`, () => {
+    const root = jsdomRoot(
+      '<div id="rows"><div class="row"><input type="checkbox" class="done"><span class="label"></span></div></div>',
+    )
+    const rules = { rows: ['#rows > .row', { label: '.label' }] }
+    assert.equal(root.querySelector('.row input').hasAttribute('value'), false)
+
+    apply(env.adapter(root), root, rules, { rows: [{ label: 'one' }, { label: 'two' }] }, writeOpts)
+
+    const boxes = [...root.querySelectorAll('#rows > .row input[type="checkbox"]')]
+    assert.equal(boxes.length, 2)
+    for (const box of boxes) {
+      assert.equal(box.hasAttribute('value'), false, 'the clone carries no value attribute')
+      assert.equal(box.value, 'on', 'an unchecked checkbox still reads "on"')
+    }
+  })
+
   test(`${env.label}: input@value, input@checked and option@selected writes reach dirty controls`, () => {
     const root = jsdomRoot(
       '<input id="i" value="seed">' +

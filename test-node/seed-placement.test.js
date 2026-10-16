@@ -165,6 +165,43 @@ for (const env of envs) {
     assert.equal(ctx.all('#api-seeds > div.note > p').length, 1)
   })
 
+  test(`seed placement [${env.label}] — whitespace around ">" still refuses another section’s seed`, () => {
+    const html =
+      tag({ items: [':scope > ul.rows > li', '.'] }) +
+      '<section class="wrong"><ul class="rows"><li data-kind="wrong" cms-template>seed</li></ul></section>' +
+      '<section class="right" id="target"><ul class="rows"></ul></section>'
+
+    for (const selector of [':scope > ul.rows > li', ':scope > ul.rows>li']) {
+      const ctx = env.make(html)
+
+      assert.throws(
+        () => apply(ctx.adapter, ctx.el('#target'), { items: [selector, '.'] }, { items: ['new'] }, OPT),
+        (err) => {
+          assert.ok(err instanceof EmptyListInsert)
+          assert.deepEqual(err.path, ['items'])
+          return true
+        },
+      )
+      assert.equal(ctx.all('#target > ul.rows > li').length, 0, `${selector} cloned the wrong section’s seed`)
+      assert.equal(ctx.all('section.wrong > ul.rows > li[cms-template]').length, 1)
+    }
+  })
+
+  test(`seed placement [${env.label}] — whitespace around ">" still grows a list from its own seed`, () => {
+    const html =
+      tag({ items: [':scope > ul.checklist-items > li', { label: ':scope > span.label' }] }) +
+      '<section class="checklist" id="target"><ul class="checklist-items"></ul></section>' +
+      '<div id="api-seeds" hidden cms-template><section class="checklist" cms-template><ul class="checklist-items">' +
+      '<li class="checklist-item" cms-template><span class="label"></span></li></ul></section></div>'
+    const ctx = env.make(html)
+    const rules = { items: [':scope > ul.checklist-items > li', { label: ':scope > span.label' }] }
+
+    apply(ctx.adapter, ctx.el('#target'), rules, { items: [{ label: 'First step' }] }, OPT)
+
+    assert.deepEqual(ctx.all('#target > ul.checklist-items > li:not([cms-template])').map(ctx.text), ['First step'])
+    assert.deepEqual(extract(ctx.adapter, ctx.el('#target'), rules, OPT), { items: [{ label: 'First step' }] })
+  })
+
   test(`seed placement [${env.label}] — a descendant-only selector with an external seed refuses instead of guessing`, () => {
     const rules = { items: ['.list li', { name: '.n' }] }
     const html =

@@ -110,7 +110,7 @@ function handleClick(e) {
     const rule = getRuleAtPath(rules, path)
     if (!Array.isArray(rule)) return
     const current = getValueAtPath(getData(), path) || []
-    onChange(setAtPath(getData(), path, [...current, scaffold(rule[1])]), {
+    onChange(setAtPath(getData(), path, [...current, scaffold(rule[1], rule[0])]), {
       structural: true,
     })
     return

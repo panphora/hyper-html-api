@@ -45,7 +45,12 @@ export function writeDocument(load, src, data, options = {}) {
   // rules the payload names are re-extracted: a one-field write on a large page
   // pays for the field it wrote, not for every rule in the document.
   const written = writtenRules(rules, data)
-  assertRoundTrip(written, data, extract(cheerioAdapter, load(html).root(), written, opts))
+  const writtenRoot = load(html).root()
+  assertRoundTrip(written, data, extract(cheerioAdapter, writtenRoot, written, opts), {
+    adapter: cheerioAdapter,
+    root: writtenRoot,
+    opts,
+  })
   return { html, changed: html !== src, spliced }
 }
 

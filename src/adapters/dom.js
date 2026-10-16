@@ -31,7 +31,10 @@ function resetFormState(node) {
     if (control.tagName === 'TEXTAREA') {
       control.value = control.defaultValue
     } else if (control.tagName === 'INPUT') {
-      if (control.type !== 'file') control.value = control.defaultValue
+      const type = control.type
+      // A checkbox or radio has no value content attribute by default, and
+      // assigning one writes the attribute: the clone would carry value="".
+      if (type !== 'file' && type !== 'checkbox' && type !== 'radio') control.value = control.defaultValue
       control.checked = control.defaultChecked
     } else if (control.tagName === 'OPTION') {
       control.selected = control.defaultSelected

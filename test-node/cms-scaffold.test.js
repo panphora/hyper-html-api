@@ -39,6 +39,18 @@ test('scaffold — deeply nested object', () => {
   })
 })
 
+test('scaffold — an attribute the row selector requires arrives present-and-empty', () => {
+  assert.equal(scaffold('@data-id', 'ul > li[data-id]'), '')
+  assert.equal(scaffold('@data-id', 'ul > li[data-id="x"]'), '')
+  assert.equal(scaffold('@data-id', 'ul > li'), null)
+  assert.equal(scaffold('@data-id', 'ul[data-id] > li'), null, 'the attribute belongs to an ancestor')
+  assert.deepEqual(scaffold({ id: '@data-id', name: 'b', labels: '@data-labels' }, 'ul > li[data-id]'), {
+    id: '',
+    name: '',
+    labels: null,
+  })
+})
+
 test('scaffold — unsupported rule (null, undefined, number) falls through to ""', () => {
   assert.equal(scaffold(null), '')
   assert.equal(scaffold(undefined), '')

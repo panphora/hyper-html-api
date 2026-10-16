@@ -210,7 +210,8 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
 
 // How many top-level child steps a stripped selector walks through ("p" is one,
 // "ul.checklist-items > li" is two), or null when a descendant, "+" or "~"
-// combinator makes the row's own context uncountable.
+// combinator makes the row's own context uncountable. Whitespace around a
+// combinator is part of it, not a descendant step of its own.
 function childSteps(selector) {
   let depth = 0
   let quote = null
@@ -229,11 +230,28 @@ function childSteps(selector) {
       if (depth > 0) depth--
     } else if (depth === 0 && ch === '>') {
       steps++
-    } else if (depth === 0 && (ch === '+' || ch === '~' || /\s/.test(ch))) {
+    } else if (depth === 0 && (ch === '+' || ch === '~')) {
       return null
+    } else if (depth === 0 && /\s/.test(ch)) {
+      if (!combinatorSpace(selector, i)) return null
+      while (i + 1 < selector.length && /\s/.test(selector[i + 1])) i++
     }
   }
   return steps
+}
+
+// Whitespace written next to ">", "+" or "~" belongs to that combinator; with a
+// compound on both sides it is a descendant step of its own.
+function combinatorSpace(selector, index) {
+  let end = index
+  while (end < selector.length && /\s/.test(selector[end])) end++
+  const before = index > 0 ? selector[index - 1] : ''
+  const after = end < selector.length ? selector[end] : ''
+  return isCombinator(before) || isCombinator(after)
+}
+
+function isCombinator(ch) {
+  return ch === '>' || ch === '+' || ch === '~'
 }
 
 // The node a stripped ":scope > ..." seed's own selector climbs to has to have

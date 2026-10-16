@@ -5,6 +5,7 @@ import * as cheerio from 'cheerio'
 
 import { scaffold } from '../src/cms/scaffold.js'
 import cheerioAdapter from '../src/adapters/cheerio.js'
+import { applyData, extractData } from '../src/dom-api.js'
 import { extract } from '../src/engine/index.js'
 import { writeDocument } from '../src/write.js'
 
@@ -17,7 +18,7 @@ globalThis.DocumentFragment = dom.window.DocumentFragment
 globalThis.Element = dom.window.Element
 globalThis.Node = dom.window.Node
 
-const { buildForm } = await import('../src/cms/form-builder.js')
+const { buildForm, bindFormEvents } = await import('../src/cms/form-builder.js')
 
 const load = cheerio.load
 
@@ -64,4 +65,36 @@ test('writing an untouched scaffolded row keeps its attribute fields absent', ()
   assert.equal(rows.length, 2)
   assert.equal(rows.eq(1).attr('data-id'), undefined, 'the new row has no data-id')
   assert.equal(rows.eq(1).find('a').attr('href'), undefined, 'the new row has no href')
+})
+
+test('the add click keeps an attribute the row selector requires', () => {
+  const rules = { items: ['ul > li[data-id]', { id: '@data-id', name: 'b' }] }
+  document.body.innerHTML = ''
+  const app = document.createElement('div')
+  app.innerHTML = '<main><ul><li data-id="a"><b>First</b></li></ul></main>'
+  const host = document.createElement('div')
+  document.body.appendChild(app)
+  document.body.appendChild(host)
+  const appRoot = app.querySelector('main')
+
+  let state = extractData(appRoot, rules)
+  assert.deepEqual(state, { items: [{ id: 'a', name: 'First' }] })
+
+  host.appendChild(buildForm({ rules, data: state, appRoot, cmsRoot: host }))
+  bindFormEvents(host, {
+    rules,
+    getData: () => state,
+    onChange: (next) => {
+      state = next
+      applyData(appRoot, state, rules)
+    },
+  })
+
+  host.querySelector('[data-hha-action="object-array-add"]').click()
+
+  assert.equal(appRoot.querySelectorAll('ul > li').length, 2, 'the row was added')
+  assert.equal(appRoot.querySelectorAll('ul > li[data-id]').length, 2, 'the added row still matches the row selector')
+  assert.deepEqual(extractData(appRoot, rules), {
+    items: [{ id: 'a', name: 'First' }, { id: '', name: '' }],
+  })
 })
