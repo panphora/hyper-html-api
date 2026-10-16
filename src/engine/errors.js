@@ -60,6 +60,22 @@ export class WriteRefused extends Error {
   }
 }
 
+function pathLabel(path) {
+  const label = path.reduce(
+    (out, part) => (typeof part === 'number' ? `${out}[${part}]` : out ? `${out}.${part}` : String(part)),
+    '',
+  )
+  return label || '(root)'
+}
+
+export class WriteNotRoundTripped extends Error {
+  constructor(path) {
+    super(`write did not round-trip at "${pathLabel(path)}"`)
+    this.name = 'WriteNotRoundTripped'
+    this.path = path
+  }
+}
+
 export class NoRulesTag extends Error {
   constructor(token) {
     super(`no <script data-rules-name~="${token}"> rules tag in this document`)

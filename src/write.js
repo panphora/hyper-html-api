@@ -1,8 +1,10 @@
 import cheerioAdapter from './adapters/cheerio.js'
 import { apply } from './engine/apply.js'
+import { extract } from './engine/extract.js'
 import { findRulesIn } from './engine/rules-tag.js'
 import { guardAdapter } from './engine/write-policy.js'
 import { planWrite } from './engine/write-plan.js'
+import { assertRoundTrip } from './engine/round-trip.js'
 import { trackAdapter, spliceDocument } from './engine/splice.js'
 import { NoRulesTag, RulesParseError, WriteRejected } from './engine/errors.js'
 
@@ -10,8 +12,8 @@ import { NoRulesTag, RulesParseError, WriteRejected } from './engine/errors.js'
 // (options.rules) or the document's own rules tag, under the content-only
 // policy. `load` is cheerio.load, passed in so this package keeps cheerio out
 // of its browser bundles. Returns the new source and whether anything changed.
-// Throws NoRulesTag, RulesParseError, WriteRejected, WriteRefused, ShapeMismatch
-// or EmptyListInsert, always before producing any output.
+// Throws NoRulesTag, RulesParseError, WriteRejected, WriteRefused, ShapeMismatch,
+// EmptyListInsert or WriteNotRoundTripped, always before producing any output.
 export function writeDocument(load, src, data, options = {}) {
   const { token = 'api' } = options
   const $ = load(src, { sourceCodeLocationInfo: true })
@@ -29,11 +31,17 @@ export function writeDocument(load, src, data, options = {}) {
   }
   const plan = planWrite(cheerioAdapter, root, rules, data)
   if (plan.unknownKeys.length || plan.unmatched.length) throw new WriteRejected(plan.unknownKeys, plan.unmatched)
+  const opts = { templateAttr: 'cms-template' }
   const tracker = trackAdapter(cheerioAdapter)
   const guarded = guardAdapter(tracker)
-  apply(guarded, root, rules, data, { templateAttr: 'cms-template' })
+  apply(guarded, root, rules, data, opts)
   guarded.assertClean()
-  if (tracker.dirty.size === 0) return { html: src, changed: false, spliced: true }
-  const { html, spliced } = spliceDocument(load, src, $, tracker)
+  const { html, spliced } = tracker.dirty.size === 0
+    ? { html: src, spliced: true }
+    : spliceDocument(load, src, $, tracker)
+  // The in-memory tree is not the contract: only the source the caller gets
+  // back is. Re-parse it and compare the caller's projection, so a write that
+  // serialization dropped throws instead of returning a false success.
+  assertRoundTrip(rules, data, extract(cheerioAdapter, load(html).root(), rules, opts))
   return { html, changed: html !== src, spliced }
 }

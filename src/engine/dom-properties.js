@@ -97,3 +97,19 @@ export const DOM_PROPERTIES_READ_ONLY_SET = new Set([
   'paused',
   'dataset',
 ])
+
+/**
+ * Form properties whose value is a boolean rather than a string. Shared by
+ * apply() and the round-trip guard so there is one conversion, not two.
+ */
+export const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
+
+export function coercePropValue(name, value) {
+  if (value === null || value === undefined) {
+    return BOOLEAN_PROPS.has(name) ? false : ''
+  }
+  // Form state and attribute round-trips deliver booleans as strings, and
+  // Boolean("false") is true: writing "false" would CHECK an unchecked box.
+  if (BOOLEAN_PROPS.has(name)) return value === 'false' ? false : Boolean(value)
+  return value
+}

@@ -1,6 +1,7 @@
 import {
   DOM_PROPERTIES_WRITE_SET,
   DOM_PROPERTIES_READ_ONLY_SET,
+  coercePropValue,
 } from './dom-properties.js'
 import {
   MaxRuleDepthExceeded,
@@ -10,8 +11,6 @@ import {
 } from './errors.js'
 import { listDiff } from './diff.js'
 import { ruleAttrIndex } from './rule-syntax.js'
-
-const BOOLEAN_PROPS = new Set(['checked', 'selected', 'disabled', 'readOnly', 'paused'])
 
 export function apply(adapter, root, rules, data, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
@@ -133,16 +132,6 @@ function writePropOrAttr(adapter, node, name, value) {
     if (adapter.attr(node, name) !== next) adapter.attr(node, name, next)
   }
   return node
-}
-
-function coercePropValue(name, value) {
-  if (value === null || value === undefined) {
-    return BOOLEAN_PROPS.has(name) ? false : ''
-  }
-  // Form state and attribute round-trips deliver booleans as strings, and
-  // Boolean("false") is true: writing "false" would CHECK an unchecked box.
-  if (BOOLEAN_PROPS.has(name)) return value === 'false' ? false : Boolean(value)
-  return value
 }
 
 function validateShape(rule, value, path, mismatches) {
