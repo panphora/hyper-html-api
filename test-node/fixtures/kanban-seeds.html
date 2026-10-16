@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<!--
+Kanban: a board of lists and cards, Trello style, in one file.
+  - Every card keeps all of its own data in its own markup: title, description, checklists,
+    attachments, comments, labels, members, dates and cover.
+  - What is computed only from the cards is ordinary saved content that sap.js paints: each
+    card's face, each list's count, the board name in the top bar. Opening the file recomputes
+    the same values, so it changes nothing.
+  - What differs per tab sits in clay="freeze" scratchpads, whose contents never save or sync:
+    a face's due badge and avatars, the save status, the people in the top bar, the filter
+    panel, and the stylesheets that hide filtered cards and, on a phone, the other lists.
+    Search, the chosen filters and the phone's list tab are sap transient state.
+  - Controls the app adds (list handles and menus, add buttons, dialogs) are clay="editor-ui"
+    clones, so looking at the board never changes the saved bytes.
+  - The open card is the URL hash (#card=<id>, through clay-router). The card itself is shown
+    as the modal and its title is edited in place; everything else in the detail is
+    clay="editor-ui" furniture that sap paints, so opening a card or typing a draft never
+    changes the saved bytes.
+  - People are recorded through ClayJS's people plugin: <div clay-people hidden> names them, and
+    comments and members point at them by id.
+-->
+<html lang="en" autosave>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c2635">
+<title>Launch Plan · Kanban</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0c2635;--navy-2:#183442;--ink:#263d4e;--muted:#536988;--subtle:#62748a;--page:#f8fafc;--paper:#fefefd;--well:#f2f6fa;--line:#e0e7ee;--violet:#7356ba;--violet-ink:#66469d;--violet-soft:#eee8f9;--danger:#9a4741;--shadow:0 2px 3px #30527405,0 5px 16px #30527408}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--page);font-family:'Work Sans',system-ui,sans-serif;color:var(--ink);font-size:14px;line-height:1.5;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;border-radius:7px;min-height:36px}
+button:disabled{cursor:default;opacity:.5}
+button:hover:not(:disabled){background-color:#e9eef4}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid #9775df;outline-offset:2px}
+input,textarea,select{background:var(--paper);border:1px solid #cbd6e2;border-radius:6px}
+input::placeholder,textarea::placeholder{color:var(--subtle);opacity:1}
+a{color:#6645a5;text-underline-offset:3px}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+h1,h2,h3,h4,p{margin:0}
+[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.icon-button{width:36px;height:36px;padding:9px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* top bar */
+.topbar{height:56px;background:var(--navy);color:#edf3f8;display:flex;align-items:center;padding:0 20px;gap:14px}
+.brandmark{width:22px;height:22px;border:5px solid #8da5bb;border-radius:50%;flex-shrink:0}
+.board-title{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;margin-left:-4px;color:#edf3f8;font-size:17px;font-weight:600;letter-spacing:-.4px}
+.board-title span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board-title svg{color:#96afc2;width:14px;height:14px}
+.topbar .board-title:hover{background:#1d3a4a}
+.top-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
+.search{height:36px;width:230px;border:1px solid #3c5361;background:var(--navy-2);border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 10px;color:#b6c7d5}
+.search svg{width:16px;height:16px}
+.search input{padding:0;width:100%;min-width:0;border:0;background:none;color:#f0f5f8;outline:none!important}
+.search input::placeholder{color:#becbd6}
+.search kbd{font-size:11px;font-family:inherit;border:1px solid #526876;border-radius:4px;padding:0 5px}
+.search:focus-within{outline:2px solid #ba9beb;outline-offset:2px}
+.nav-button{display:flex;align-items:center;gap:7px;padding:0 11px;color:#e6edf3;border:1px solid #435b6a;min-height:36px}
+.topbar .nav-button:hover:not(:disabled){background:#274556}
+.nav-button[aria-expanded="true"],.nav-button.filtering{background:#405068;border-color:#6d7f95}
+.nav-button.primary{background:#eaf0f5;color:#193646;border-color:#eaf0f5;font-weight:550}
+.topbar .nav-button.primary:hover{background:#d9e5ef}
+.faces{display:flex;align-items:center}
+.faces .avatar{width:28px;height:28px;border:2px solid var(--navy);font-size:10px}
+.faces .avatar+.avatar{margin-left:-7px}
+.me-button{border:0;background:none;padding:0;cursor:pointer;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.me-button[hidden]{display:none}
+.me-button .avatar{width:28px;height:28px;border:2px solid #9775df;font-size:10px}
+.me-button:focus-visible{outline:3px solid #9775df;outline-offset:2px}
+.save-chip{font-size:11px;color:#b6c7d5;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.save-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:#7f95a8}
+.save-chip[data-state="saved"]::before{background:#6fbf9a}
+.save-chip[data-state="saving"]::before{background:#d8b56c}
+.save-chip[data-state="error"]::before,.save-chip[data-state="conflict"]::before,.save-chip[data-state="offline"]::before{background:#e48a7f}
+
+/* avatars: full colour, near-white initials */
+.avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:26px;height:26px;border-radius:50%;font-size:10px;font-weight:600;letter-spacing:-.2px;color:#fbfaf7;background:#4f6178;border:2px solid var(--paper);line-height:1}
+.avatar[data-c="0"]{background:#6b4fa8}.avatar[data-c="1"]{background:#2f6a9e}.avatar[data-c="2"]{background:#9a6a1c}.avatar[data-c="3"]{background:#a8463d}
+.avatar[data-c="4"]{background:#2f7a69}.avatar[data-c="5"]{background:#4f6178}.avatar[data-c="6"]{background:#3f7d3a}.avatar[data-c="7"]{background:#a2457a}
+.avatars{display:flex;align-items:center}.avatars .avatar+.avatar{margin-left:-6px}
+
+/* label and cover colours */
+[data-color="violet"]{--label-bg:#eee7f9;--label-ink:#684398;--solid:#a68bcf}
+[data-color="blue"]{--label-bg:#e4edf9;--label-ink:#376397;--solid:#7fa3cf}
+[data-color="amber"]{--label-bg:#f8edda;--label-ink:#866020;--solid:#d6b67d}
+[data-color="red"]{--label-bg:#f7e4e1;--label-ink:#a03e39;--solid:#d9897f}
+[data-color="teal"]{--label-bg:#dff0ea;--label-ink:#326e61;--solid:#7dbbab}
+[data-color="slate"]{--label-bg:#e5eaf0;--label-ink:#53617a;--solid:#9aa8ba}
+[data-color="green"]{--label-bg:#e3f0dc;--label-ink:#3d6a2c;--solid:#93bf7f}
+[data-color="pink"]{--label-bg:#f7e3ee;--label-ink:#8f3d68;--solid:#d991b6}
+.chip{display:inline-flex;align-items:center;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:550;line-height:1.7;color:var(--label-ink,#53617a);background:var(--label-bg,#e5eaf0);white-space:nowrap}
+
+/* board and lists (the saved markup) */
+.board{height:calc(100dvh - 56px);padding:18px 20px 18px;display:flex;gap:14px;overflow-x:auto;align-items:flex-start;scrollbar-color:#c2cedc transparent;scrollbar-width:thin}
+.board-app{display:contents}
+.chip-slot,.filter-slot,.me-slot,.pop-slot{display:contents}
+.board-data,.label-defs{display:none}
+.list{flex:0 0 272px;background:var(--well);border:1px solid #e4eaf0;border-radius:11px;padding:4px 8px 6px;max-height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-rows:auto minmax(0,1fr) auto;align-items:center}
+.list-title{grid-column:2;font-size:13px;font-weight:650;padding:12px 4px;min-width:0;overflow-wrap:anywhere;cursor:default}
+.list-handle{grid-column:1;width:24px;height:36px;display:grid;place-items:center;cursor:grab;touch-action:none}
+.list-handle i{width:8px;height:8px;border-radius:50%;background:var(--dot,#9ba8b9);box-shadow:0 0 0 3px var(--dot-ring,#e6ecf2)}
+.list[data-tone="1"]{--dot:#698ba6}.list[data-tone="2"]{--dot:#8d70c8;--dot-ring:#e9e2f5}.list[data-tone="3"]{--dot:#b18a48;--dot-ring:#f1e9dc}.list[data-tone="4"]{--dot:#488d7d;--dot-ring:#dcece6}.list[data-tone="5"]{--dot:#a8635d;--dot-ring:#f3e2df}
+.count{grid-column:3;font-size:11px;font-weight:500;color:#566a80;background:#e6ecf2;padding:0 6px;min-width:20px;text-align:center;border-radius:5px;margin-right:2px}
+.list-menu{grid-column:4;color:#6b7d91}
+.cards{grid-column:1/-1;list-style:none;margin:0;padding:2px 2px 4px;overflow-y:auto;min-height:6px;scrollbar-width:thin}
+.add-card{grid-column:1/-1;display:flex;gap:8px;align-items:center;width:100%;padding:0 10px;font-size:12px;color:var(--muted);text-align:left}
+.add-card svg{width:15px}
+.add-list-tile{flex:0 0 272px;display:flex;align-items:center;gap:8px;justify-content:center;border:1px dashed #c3cfdc;border-radius:11px;min-height:48px;color:var(--muted);font-size:13px}
+
+/* cards: the saved data is hidden, the face is drawn */
+.card{position:relative;background:var(--paper);border:1px solid #e1e7ee;border-radius:8px;box-shadow:var(--shadow);margin-bottom:9px;overflow:hidden;transition:border-color 160ms,box-shadow 160ms}
+.card:has(>.card-face)>:not(.card-face){display:none}
+.card:not(:has(>.card-face))>.card-title{font-size:13px;font-weight:500;padding:12px 13px;margin:0}
+.card:not(:has(>.card-face))>:not(.card-title){display:none}
+.card:hover{border-color:#a8b7c8;box-shadow:0 4px 14px #30527413}
+.card.sortable-ghost{opacity:.4}
+.card-open{padding:12px 13px;width:100%;text-align:left;display:block;border-radius:7px;min-height:0}
+.card-open:hover{background:transparent!important}
+.card-open:focus-visible{outline-offset:-3px}
+.cover{display:block;height:28px;margin:-12px -13px 11px;background:var(--solid,#c9d3df)}
+.cover-img{display:block;width:calc(100% + 26px);height:120px;background:var(--img) center/cover;margin:-12px -13px 11px}
+.face-title{display:block;font-size:13px;line-height:1.55;font-weight:500;letter-spacing:-.1px;overflow-wrap:anywhere}
+.face-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px}
+.face-bottom{display:flex;align-items:center;gap:5px;margin-top:10px}
+.face-bottom:empty{display:none}
+.face-bottom>.avatars{margin-left:auto}
+.due-slot:empty,.avatars:empty{display:none}
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:#62748a;font-size:10px}
+.badge{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.badge svg{width:13px;height:13px}
+.badge.all-done{color:#2e6e55}
+.due{padding:2px 5px;border-radius:4px;background:#edf1f5;color:#53657b}
+.due[data-state="soon"]{background:#faf0d9;color:#875b16}
+.due[data-state="overdue"]{background:#f9e6e3;color:#a13f37}
+.due[data-state="done"]{background:#e4f0e9;color:#2e6e55}
+
+/* popovers, menus and dialogs */
+.popup{position:fixed;width:280px;border:1px solid #d5dfea;border-radius:11px;box-shadow:0 12px 36px #12304422;background:var(--paper);padding:14px;z-index:20;max-height:calc(100dvh - 80px);overflow:auto}
+.popup h2{font-size:13px;font-weight:650;margin-bottom:8px}
+.popup .group{margin-top:10px}
+.popup .group-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.check-option{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12px;cursor:pointer;padding:0 4px;border-radius:5px}
+.check-option:hover{background:#f1f4f8}
+.check-option input{min-height:0;width:15px;height:15px;margin:0;accent-color:#7856ac}
+.popup-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:11px;color:var(--muted);gap:8px}
+.popup-bottom button{padding:0 9px;font-size:11px;text-decoration:underline;text-underline-offset:3px;min-height:30px}
+.menu{position:fixed;min-width:190px;border:1px solid #d5dfea;border-radius:9px;box-shadow:0 12px 30px #12304422;background:var(--paper);padding:5px;z-index:25;display:flex;flex-direction:column}
+.menu button{display:flex;align-items:center;gap:9px;padding:0 10px;font-size:12px;text-align:left;min-height:34px}
+.menu button svg{width:15px;height:15px;color:var(--muted)}
+.menu .danger{color:var(--danger)}.menu .danger svg{color:var(--danger)}
+.small-dialog{border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);width:380px;max-width:calc(100% - 32px);padding:22px;box-shadow:0 20px 65px #12304430}
+.small-dialog::backdrop{background:#17304440}
+.small-dialog h2{font-size:17px;letter-spacing:-.4px;margin-bottom:12px}
+.small-dialog p{font-size:13px;color:var(--muted);margin-bottom:14px}
+.small-dialog label{display:block;font-size:12px;color:var(--muted);margin-bottom:12px}
+.small-dialog input,.small-dialog select,.small-dialog textarea{display:block;width:100%;padding:8px 10px;margin-top:5px;min-height:38px}
+.small-dialog textarea{min-height:110px;resize:vertical}
+.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.form-actions button{padding:0 14px;font-size:12px}
+.primary-button{background:var(--navy);color:#eef3f7}
+.primary-button:hover:not(:disabled){background:#25475b!important}
+.danger-button{background:#a8463d;color:#fdf6f4}
+.danger-button:hover:not(:disabled){background:#8f3b33!important}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:6px 6px 6px 16px;background:var(--navy);color:#edf3f8;z-index:40;border:1px solid #486273;border-radius:8px;font-size:12px;box-shadow:0 8px 25px #14334725;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px)}
+.toast button{color:#d9c7f6;font-weight:600;padding:0 10px;min-height:32px}
+.toast button:hover{background:#274556!important}
+.toast:not(:has(button)){padding:10px 16px}
+.empty-note{padding:14px 8px;font-size:12px;text-align:center;color:var(--muted)}
+.no-results{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:var(--paper);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);z-index:10;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px}
+.no-results[hidden]{display:none}
+
+/* card detail */
+.detail-cover{height:7px;background:var(--solid,#d7deea);flex-shrink:0}
+.detail-cover.has-image{height:120px;background:none}
+#board .card[route-active]{position:fixed;z-index:30;top:32px;left:0;right:0;margin:0 auto;width:940px;max-width:calc(100% - 32px);height:min(718px,calc(100dvh - 64px));display:flex;flex-direction:column;overflow:hidden;border:1px solid #d8e0e8;border-radius:13px;box-shadow:0 32px 90px #142d4240;animation:appear 160ms ease-out}
+#board .card[route-active]>*{display:none}
+#board .card[route-active]>:is(.detail-top,.card-title,.detail-body){display:block}
+#board .card[route-active]>.detail-top{flex-shrink:0}
+#board .card[route-active]>.card-title{flex-shrink:0;margin:0;padding:0 22px 16px 26px;border-bottom:1px solid var(--line);font-size:23px;font-weight:600;line-height:1.3;letter-spacing:-.7px;overflow-wrap:anywhere;outline:none}
+#board .card[route-active]>.card-title[contenteditable]:focus{box-shadow:inset 0 -2px #b9a4e0}
+#board .card[route-active]>.detail-body{flex:1;min-height:0;display:flex;flex-direction:column}
+#board .card:not([route-active])>:is(.detail-top,.detail-body){display:none}
+.detail-cover .cover-img{width:100%;height:100%;margin:0}
+.prop-chips,.swatch-list,.attach-thumb{display:contents}
+.backdrop{display:none;position:fixed;inset:0;z-index:29;background:#17304432}
+:root[route-card] .backdrop{display:block}
+.detail-header{padding:18px 22px 6px 26px;display:flex;gap:12px;align-items:flex-start}
+.detail-header .breadcrumb{flex:1;min-width:0;margin:9px 0 0}
+.breadcrumb{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:4px;flex-wrap:wrap}
+.breadcrumb svg{height:12px;width:12px}
+.breadcrumb b{font-weight:500;color:var(--violet-ink)}
+.breadcrumb .num{margin-left:4px;color:#607086}
+.detail-scroll{display:grid;grid-template-columns:minmax(0,1fr) 300px;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin}
+.detail-main{padding:22px 26px 26px;min-width:0}
+.detail-side{border-left:1px solid var(--line);background:#f7f9fc;padding:20px 20px;min-width:0}
+.section{margin-bottom:24px}
+.section-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.section-head svg{color:#62748a;width:16px;height:16px}
+.section-head h3{font-size:13px;font-weight:600}
+.section-head .spacer{margin-left:auto}
+.small-button{padding:0 10px;min-height:30px;font-size:11px;color:var(--muted);border:1px solid #dbe3ec;background:var(--paper)}
+.description{font-size:13px;color:#4a5b71;line-height:1.7;overflow-wrap:anywhere}
+.description h1,.description h2,.description h3,.description h4{font-size:14px;font-weight:600;color:var(--ink);margin:4px 0 6px}
+.description p{margin:0 0 8px}
+.description ul,.description ol{margin:6px 0 8px;padding-left:20px}
+.description code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:#615276;background:#eeedf3;padding:1px 5px;border-radius:4px}
+.description pre{background:#f1f3f7;padding:10px;border-radius:6px;overflow:auto}
+.description blockquote{margin:6px 0;padding-left:10px;border-left:3px solid #d8dfe8}
+.placeholder{color:var(--subtle);font-size:12px;font-style:italic}
+.desc-editor{width:100%;min-height:160px;padding:10px;font-size:13px;line-height:1.6;resize:vertical}
+.row-actions{display:flex;gap:8px;margin-top:8px}
+.row-actions button{padding:0 12px;font-size:12px}
+.checklist{margin-bottom:16px}
+.checklist-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.checklist-head h4{font-size:12px;font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
+.track{height:5px;background:#e9e8ee;border-radius:5px;overflow:hidden;margin-bottom:6px}
+.fill{height:100%;width:var(--w,0%);background:#9c83c8;border-radius:5px}
+.progress-label{font-size:10px;color:var(--muted)}
+.check-row{display:flex;gap:8px;align-items:center;min-height:34px;font-size:12px;padding:0 4px;border-radius:5px;margin-left:-4px}
+.check-row:hover{background:#f0edf6}
+.check-hit{display:grid;place-items:center;flex-shrink:0;cursor:pointer}
+.check-row input[type=checkbox]{min-height:0;width:15px;height:15px;margin:0;accent-color:#8362b7;flex-shrink:0}
+.check-row button.check-text{text-align:left;font:inherit;color:inherit;background:none;min-height:0;border-radius:4px}
+.check-row .check-text{flex:1;min-width:0;overflow-wrap:anywhere;cursor:text;padding:4px 0}
+.check-row.done .check-text{text-decoration:line-through;color:#657486}
+.check-row .avatar{width:22px;height:22px;font-size:9px;border:0}
+.check-row .row-tool{opacity:0;width:28px;height:28px;min-height:28px;padding:6px}
+.check-row:hover .row-tool,.check-row:focus-within .row-tool{opacity:1}
+.add-item{display:flex;gap:6px;margin-top:4px}
+.add-item input{flex:1;min-width:0;padding:6px 9px;font-size:12px;min-height:32px}
+.attachment-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.attachment{border:1px solid var(--line);border-radius:7px;padding:8px;display:flex;align-items:center;gap:9px;min-width:0;background:var(--paper)}
+.attachment .thumb{width:44px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;background:#eef2f6}
+.attachment .file-icon{width:36px;height:36px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;background:var(--violet-soft);color:#7854ac}
+.attachment .meta{min-width:0;flex:1}
+.attachment a{display:block;font-size:12px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink);text-decoration:none}
+.attachment a:hover{text-decoration:underline}
+.attachment small{display:flex;gap:8px;font-size:10px;color:var(--muted)}
+.attachment small button{min-height:0;padding:0;font-size:10px;color:var(--muted);text-decoration:underline}
+.attachment small button:hover{background:none!important;color:var(--ink)}
+.prop{margin-bottom:14px}
+.prop-label{font-size:10px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.prop-line{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.prop .chip{font-size:11px;padding:3px 9px}
+.add-pill{width:30px;min-height:28px;border:1px dashed #b5c0d0;border-radius:6px;display:grid;place-items:center;color:var(--muted);padding:0}
+.add-pill svg{width:13px;height:13px}
+.member-pill{display:inline-flex;gap:5px;align-items:center;border:1px solid #e0e5ee;border-radius:6px;padding:2px 7px 2px 2px;background:var(--paper);font-size:11px}
+.member-pill .avatar{width:22px;height:22px;font-size:9px;border:0}
+.dates{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:11px}
+.dates input[type=date]{padding:3px 6px;font-size:12px;min-height:30px;width:100%}
+.complete{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:6px;cursor:pointer;color:var(--muted)}
+.complete input{min-height:0;width:15px;height:15px;margin:0;accent-color:#7856ac}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.swatch{width:30px;height:22px;min-height:22px;border-radius:5px;background:var(--solid,#fefefd);border:1px solid #d6dee8;padding:0}
+.swatch[aria-pressed="true"]{outline:2px solid var(--violet);outline-offset:2px}
+.swatch.none{background:repeating-linear-gradient(135deg,#fefefd 0 5px,#e7ecf2 5px 7px)}
+.picker{border:1px solid #dbe3ec;border-radius:8px;background:var(--paper);padding:6px;margin-top:6px}
+.activity{border-top:1px solid var(--line);padding-top:16px;margin-top:4px}
+.comment{display:flex;gap:8px;margin-bottom:14px}
+.comment-avatar{display:flex;flex-shrink:0}
+.comment-avatar .avatar{width:26px;height:26px;font-size:9px;border:0;margin-top:1px}
+.comment-body{min-width:0;flex:1}
+.comment-head{display:flex;gap:6px;align-items:baseline;font-size:11px;flex-wrap:wrap}
+.comment-head strong{font-weight:600}
+.comment-head time{color:var(--subtle);font-size:10px}
+.comment-text{font-size:12px;color:#4d5f75;line-height:1.6;margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-tools{display:flex;gap:10px;margin-top:2px}
+.comment-tools button{min-height:0;padding:0;font-size:10px;color:var(--muted);text-decoration:underline}
+.comment-tools button:hover{background:none!important;color:var(--ink)}
+.compose textarea{width:100%;min-height:64px;resize:vertical;padding:8px;font-size:12px;line-height:1.5}
+@media (pointer:coarse){input:not([type=checkbox],[type=radio],[type=file],[type=color]),textarea:not(.detail-title),select{font-size:16px!important}}
+.compose button{margin-top:6px;padding:0 12px;font-size:11px;min-height:32px}
+.compose-note{font-size:11px;color:var(--danger);margin-top:6px}
+.detail-footer{border-top:1px solid var(--line);display:flex;align-items:center;gap:4px;padding:6px 16px;background:var(--paper);flex-shrink:0}
+.text-button{display:flex;align-items:center;gap:7px;padding:0 10px;min-height:36px;font-size:12px;color:var(--muted)}
+.text-button svg{width:15px;height:15px}
+.text-button.danger{color:var(--danger)}
+.detail-footer .close-text{margin-left:auto}
+@keyframes appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* phone tabs, hidden on desktop */
+.mobile-tabs{display:none}
+
+@media (max-width:760px){
+  .topbar{height:auto;padding:10px 14px;gap:8px 10px;flex-wrap:wrap}
+  .board-title{flex:1;font-size:17px}
+  .save-chip span{display:none}
+  .top-actions{order:3;width:100%;gap:8px;margin:0}
+  .search{flex:1;width:auto;height:44px}
+  .search kbd{display:none}
+  .nav-button{min-height:44px;min-width:44px;justify-content:center;padding:0 10px}
+  .nav-button .label{display:none}
+  .faces .avatar:nth-child(n+4){display:none}
+  .me-button{min-width:44px;min-height:44px}
+  .board{display:block;height:calc(100dvh - 116px - 70px);padding:12px 14px 16px;overflow-x:hidden;overflow-y:auto}
+  .list{width:100%;max-height:none;padding:4px 10px 8px}
+  .list-handle{display:none}
+  .list-title{grid-column:1/3;font-size:15px;padding:12px 4px}
+  .list-menu{width:44px;height:44px}
+  .card{margin-bottom:10px}
+  .card-open{padding:14px}
+  .face-title{font-size:14px}
+  .chip{font-size:11px}
+  .add-card{min-height:44px;font-size:13px}
+  .add-list-tile{width:100%;min-height:52px;margin-top:4px}
+  .mobile-tabs{position:fixed;bottom:0;left:0;right:0;height:70px;display:flex;align-items:stretch;border-top:1px solid #dce4ed;background:var(--paper);padding:8px 8px max(8px,env(safe-area-inset-bottom));gap:3px;overflow-x:auto;z-index:15}
+  .mobile-tabs button{flex:1 0 64px;min-width:64px;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:10px;gap:1px;color:var(--muted);min-height:48px;line-height:1.5;padding:0 4px}
+  .mobile-tabs button b{font-size:11px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mobile-tabs button[aria-pressed="true"]{background:#ede7f7;color:#69459d}
+  .board-app:has(#tab-style:empty) #board>.list:not(:first-of-type):not(:has(.card[route-active])){display:none}
+  .toast{bottom:82px}
+  .popup{left:14px!important;right:14px!important;width:auto}
+  .menu button{min-height:44px}
+  #board .card[route-active]{top:0;bottom:0;width:auto;max-width:none;height:100dvh;border:0;border-radius:0}
+  #board .card[route-active]>.card-title{font-size:21px;padding:0 14px 12px 18px}
+  .detail-header{padding:14px 14px 12px 18px}
+  .detail-header .icon-button{width:44px;height:44px}
+  .detail-scroll{display:flex;flex-direction:column}
+  .detail-main{order:1;padding:18px 18px 8px}
+  .detail-side{order:2;border-left:0;border-top:1px solid var(--line);padding:16px 18px 4px}
+  .attachment-grid{grid-template-columns:1fr}
+  .check-row{min-height:44px;font-size:13px}
+  .check-row .row-tool,.checklist-head .icon-button{opacity:1;width:44px;height:44px}
+  .check-hit{width:44px;height:44px;margin:0 -10px 0 -14px}
+  .check-option{min-height:44px}
+  .popup-bottom button{min-height:44px}
+  .board-title{min-height:44px}
+  .attachment .meta a{display:inline-block;min-height:44px;line-height:44px}
+  .attachment small{align-items:center;justify-content:flex-start}
+  .add-item input{min-height:44px;font-size:14px}
+  .small-button,.compose button,.row-actions button{min-height:44px}
+  .add-pill{width:44px;min-height:44px}
+  .swatch{width:44px;height:44px}
+  .dates input[type=date]{min-height:44px}
+  .text-button{min-height:44px;flex:1;justify-content:center}
+  .detail-footer{padding:6px 8px max(6px,env(safe-area-inset-bottom))}
+  .detail-footer .close-text{display:none}
+  .comment-tools button,.attachment small button{min-height:44px;padding:0 8px}
+  .form-actions button{min-height:44px}
+  .toast button{min-height:44px}
+  .check-row button.check-text{min-height:44px}
+  .complete{min-height:44px;padding:0 4px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+<script type="application/json" data-rules-name="api" data-rules-version="1">{"boardName":"#board-meta > h1#board-name","nextCard":"#board-meta@data-next-card","labelDefs":["#board-meta ul.label-defs > li",{"id":"@data-id","color":"@data-color","name":"."}],"lists":["#board > section.list[item]",{"id":"@data-id","title":"h2.list-title","tone":"@data-tone","cards":["ol.cards > li.card[item]",{"id":"@data-id","num":"@data-num","title":"h3.card-title","desc":"div.card-desc","labels":"@data-labels","cover":"@data-cover","coverImage":"@data-cover-image","due":"@data-due","start":"@data-start","complete":"@data-complete","members":"@data-members","checklists":[":scope > section.checklist",{"id":"@data-id","name":"h4","items":[":scope > ul.checklist-items > li",{"id":"@data-id","text":".","done":"@data-done","member":"@data-member"}]}],"comments":["ol.comments > li",{"id":"@data-id","by":"@data-by","at":"@data-at","edited":"@data-edited","text":"."}],"attachments":["ul.attachments > li",{"id":"@data-id","name":"a","href":"a@href","kind":"a@data-kind"}]}]}],"people":["[clay-people] > data",{"id":"@value","name":"."}]}</script>
+</head>
+<body>
+<svg hidden xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-checklist" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 12 3 3 7-7"/></symbol>
+<symbol id="i-description" viewBox="0 0 24 24"><path d="M5 6h14M5 10h14M5 14h14M5 18h8"/></symbol>
+<symbol id="i-comment" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></symbol>
+<symbol id="i-attachment" viewBox="0 0 24 24"><path d="M20 11.5 12.2 19.3a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z"/></symbol>
+<symbol id="i-move" viewBox="0 0 24 24"><path d="M4 12h15m-5-5 5 5-5 5"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4M9 8l3-3a5 5 0 0 1 7 7l-3 3M15 16l-3 3a5 5 0 0 1-7-7l3-3"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8Z"/><circle cx="7.5" cy="8.5" r="1.3"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+</defs></svg>
+
+<!-- The app. #board, #board-meta and [clay-people] hold the saved data; the top bar, tabs and filter panel are saved chrome that sap paints. -->
+<div class="board-app" sap state="tab:transient flabels:transient fmembers:transient fdue:transient" calc:hiddencards="Board.hidden(state)" calc:activetab="Board.activeTab(state)">
+<header class="topbar">
+  <span class="brandmark" aria-hidden="true"></span>
+  <button class="board-title" id="board-title" data-act="rename-board" title="Rename board"><span text="Board.name()">Launch Plan</span><svg aria-hidden="true" class="edit-only"><use href="#i-edit"/></svg></button>
+  <span class="chip-slot" clay="freeze"><span class="save-chip edit-only" id="save-chip" data-state="starting" role="status"><span>Starting…</span></span></span>
+  <div class="top-actions">
+    <label class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" bind="q" transient placeholder="Search cards" aria-label="Search cards" autocomplete="off"><kbd>/</kbd></label>
+    <span class="filter-slot" clay="freeze"><button class="nav-button" id="filter-toggle" data-act="toggle-filters" aria-label="Filter" aria-expanded="false" aria-controls="filters" class:filtering="Board.chosen(state)"><svg aria-hidden="true"><use href="#i-filter"/></svg><span class="label">Filter</span></button></span>
+    <button class="nav-button primary edit-only" data-act="add-list" aria-label="Add list"><svg aria-hidden="true"><use href="#i-plus"/></svg><span class="label">Add list</span></button>
+  </div>
+  <div class="faces" id="faces" aria-label="People on this board" clay="freeze" effect="Board.paintFaces(el)"></div>
+  <span class="me-slot" clay="freeze" effect="Board.paintMe(el)"><button class="me-button edit-only" id="me" data-act="change-my-name" title="Change my name" aria-label="Change my name" hidden></button></span>
+</header>
+<div id="board-meta" class="board-data" data-next-card="15">
+<h1 id="board-name">Launch Plan</h1>
+<ul class="label-defs">
+<li data-id="design" data-color="violet">Design</li>
+<li data-id="backend" data-color="blue">Backend</li>
+<li data-id="marketing" data-color="amber">Marketing</li>
+<li data-id="bug" data-color="red">Bug</li>
+<li data-id="research" data-color="teal">Research</li>
+<li data-id="blocked" data-color="slate">Blocked</li>
+<li data-id="" data-color="" cms-template></li>
+</ul>
+</div>
+<main id="board" class="board" sortable="lists" items="lists" aria-label="Board">
+<section class="list" item data-id="l-ideas" data-tone="0">
+<h2 class="list-title">Ideas</h2>
+<span class="count" text="item.cards.length">3</span>
+<ol class="cards" sortable="cards" items="cards" route="card">
+<li class="card" item data-id="c-k3v9q2" data-num="1"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-k3v9q2"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id" hidden=""><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Referral program for early users</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Referral program for early users</h3><div class="card-desc">Explore a simple referral reward for our first 100 customers.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-p8d2m4" data-num="2" data-labels="design"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-p8d2m4"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Dark mode</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Dark mode</h3><div class="card-desc">Explore a calm dark palette with accessible contrast.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-w4n7t1" data-num="3" data-labels="marketing"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-w4n7t1"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Public roadmap page</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Public roadmap page</h3><div class="card-desc">Give customers a clear view of what we are building next.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+</ol>
+</section>
+<section class="list" item data-id="l-todo" data-tone="1">
+<h2 class="list-title">To do</h2>
+<span class="count" text="item.cards.length">4</span>
+<ol class="cards" sortable="cards" items="cards" route="card">
+<li class="card" item data-id="c-b6h1r8" data-num="4" data-labels="marketing"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-b6h1r8"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Write onboarding emails</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Write onboarding emails</h3><div class="card-desc">A friendly three-email welcome sequence. Help people reach their first useful board.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-f2x5j9" data-num="5" data-labels="backend"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-f2x5j9"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Rate limit the public API</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">0/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Rate limit the public API</h3><section class="checklist" data-id="k-r1"><h4>Implementation</h4><ul class="checklist-items"><li data-id="i-s01">Choose per-token limits</li><li data-id="i-s02">Add the request counter</li><li data-id="i-s03">Return rate limit headers</li><li data-id="i-s04">Test the retry behavior</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-q9s3e6" data-num="6" data-labels="research"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-q9s3e6"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Interview five churned users</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Interview five churned users</h3><div class="card-desc">Find out what people needed when they decided to leave. Bring three clear themes back to the team.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-m7c4u2" data-num="7" data-labels="bug" data-cover="red"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-m7c4u2"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" data-color="red"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Fix Safari upload bug</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Fix Safari upload bug</h3><div class="card-desc">The file picker sometimes resets before an upload finishes on Safari. Reproduce with a large image.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+</ol>
+</section>
+<section class="list" item data-id="l-doing" data-tone="2">
+<h2 class="list-title">Doing</h2>
+<span class="count" text="item.cards.length">2</span>
+<ol class="cards" sortable="cards" items="cards" route="card">
+<li class="card" item data-id="c-a5t8w3" data-num="8" data-labels="design" data-cover="violet"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-a5t8w3"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" data-color="violet"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Design the new dashboard</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">3/5</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)"><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">1</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Design the new dashboard</h3><div class="card-desc">#### A clearer picture of what matters
+Give teams a useful starting point, with less noise and a little more room to think.
+
+- Bring **active projects** and next steps to the foreground.
+- Keep recent activity helpful, without overwhelming the page.
+- Build on our existing `12-column` grid.</div><section class="checklist" data-id="k-d1"><h4>Design checklist</h4><ul class="checklist-items"><li data-id="i-s05" data-done="">Audit the current dashboard</li><li data-id="i-s06" data-done="">Map the core user journeys</li><li data-id="i-s07" data-done="">Explore initial wireframes</li><li data-id="i-s08">Design the high-fidelity screens</li><li data-id="i-s09">Review with the team</li></ul></section><ul class="attachments"><li data-id="a-s01"><a href="https://www.figma.com/" data-kind="link">Dashboard explorations</a></li></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-g1y6n5" data-num="9" data-labels="backend"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-g1y6n5"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Move sessions to Postgres</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Move sessions to Postgres</h3><div class="card-desc">Move the session records into Postgres and verify expiry and logout behavior.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+</ol>
+</section>
+<section class="list" item data-id="l-review" data-tone="3">
+<h2 class="list-title">Review</h2>
+<span class="count" text="item.cards.length">2</span>
+<ol class="cards" sortable="cards" items="cards" route="card">
+<li class="card" item data-id="c-h8r2v7" data-num="10" data-labels="backend design"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-h8r2v7"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Invite flow for teams</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge all-done" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text">4/4</span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Invite flow for teams</h3><section class="checklist" data-id="k-i1"><h4>Ready for review</h4><ul class="checklist-items"><li data-id="i-s10" data-done="">Design the invite screen</li><li data-id="i-s11" data-done="">Create invitation tokens</li><li data-id="i-s12" data-done="">Send the invite email</li><li data-id="i-s13" data-done="">Handle expired links</li></ul></section><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-e3u9k1" data-num="11" data-labels="bug"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-e3u9k1"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Fix CSV export timezone</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Fix CSV export timezone</h3><div class="card-desc">The export should use the same timezone as the board.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+</ol>
+</section>
+<section class="list" item data-id="l-done" data-tone="4">
+<h2 class="list-title">Done</h2>
+<span class="count" text="item.cards.length">3</span>
+<ol class="cards" sortable="cards" items="cards" route="card">
+<li class="card" item data-id="c-n4z7b2" data-num="12" data-labels="backend" data-complete=""><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-n4z7b2"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Set up error monitoring</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Set up error monitoring</h3><div class="card-desc">Production errors now include the request context and release version.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-v6o1x8" data-num="13" data-labels="design" data-cover="amber"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-v6o1x8"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" data-color="amber"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">New logo</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">New logo</h3><div class="card-desc">A familiar circle, refined for small screens and everyday use.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+<li class="card" item data-id="c-j2l5p9" data-num="14" data-labels="research"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key" data-card="c-j2l5p9"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)" hidden=""></span><span class="cover" show="Face.cover(item.$el) &amp;&amp; !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)" hidden="" data-color=""></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)">Customer interviews, round one</span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)" hidden=""></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"></use></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone" hidden=""><svg aria-hidden="true"><use href="#i-checklist"></use></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-comment"></use></svg><span text="Face.comments(item.$el)">0</span></span><span class="badge" title="Attachments" show="Face.files(item.$el)" hidden=""><svg aria-hidden="true"><use href="#i-attachment"></use></svg><span text="Face.files(item.$el)">0</span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)" hidden=""></span></span></button></div><h3 class="card-title" editmode:contenteditable inert-contenteditable="plaintext-only">Customer interviews, round one</h3><div class="card-desc">Five conversations, three clear themes: clarity, speed, and room to focus.</div><ul class="attachments"></ul><ol class="comments"></ol></li>
+</ol>
+</section>
+<section class="list" item data-id="" data-tone="" cms-template><h2 class="list-title"></h2><span class="count" text="item.cards.length">0</span><ol class="cards" sortable="cards" items="cards" route="card"></ol></section>
+</main>
+<nav class="mobile-tabs" id="tabs" aria-label="Lists" each="state.lists"><template><button data-act="tab" attr:data-list="item.$key" set:tab="item.$key" attr:aria-pressed="String(item.$key === state.activetab)"><b text="Board.listTitle(item.$el)"></b><span text="item.cards.length"></span></button></template></nav>
+<div class="pop-slot" clay="freeze">
+  <section class="popup" id="filters" aria-label="Filter cards" hidden>
+    <h2>Filter cards</h2>
+    <div class="group"><div class="group-label">Labels</div><div id="filter-labels" each="Board.labelOptions(state)" key="item.id"><template><label class="check-option"><input type="checkbox" attr:value="item.id" set:flabels="Board.toggle(state.flabels, item.id)" effect="el.checked = item.on"><span class="chip" attr:data-color="item.color">&nbsp;</span><span text="item.name"></span></label></template></div><p class="placeholder" show="!Board.labelOptions(state).length" hidden>No labels yet</p></div>
+    <div class="group"><div class="group-label">Members</div><div id="filter-members" each="Board.memberOptions(state)" key="item.id"><template><label class="check-option"><input type="checkbox" attr:value="item.id" set:fmembers="Board.toggle(state.fmembers, item.id)" effect="el.checked = item.on"><span class="avatar" attr:data-c="item.c" attr:title="item.name" text="item.initials"></span><span text="item.name"></span></label></template></div><p class="placeholder" show="!Board.memberOptions(state).length">No members on cards yet</p></div>
+    <div class="group"><div class="group-label">Due</div><div id="filter-due" each="Board.dueOptions(state)" key="item.id"><template><label class="check-option"><input type="checkbox" attr:value="item.id" set:fdue="Board.toggle(state.fdue, item.id)" effect="el.checked = item.on"><span text="item.name"></span></label></template></div></div>
+    <div class="popup-bottom"><span id="filter-results" text="Board.results(state)">14 cards</span><span><button class="edit-only" data-act="edit-labels">Edit labels</button><button data-act="clear-filters">Clear</button></span></div>
+  </section>
+  <p class="empty-note no-results" id="no-results" role="status" show="Board.noResults(state)" hidden>No cards match. <button class="small-button" data-act="clear-filters">Clear filters</button></p>
+</div>
+<style clay="freeze" id="filter-style" text="Board.hideCss(state.hiddencards)"></style>
+<style clay="freeze" id="tab-style" text="Board.tabCss(state)"></style>
+</div>
+<div clay-people hidden><data value="" cms-template></data></div>
+
+<!-- Runtime UI. Cloned at startup and marked clay="editor-ui" as it is inserted, so no clone is ever saved. -->
+<template id="chrome">
+  <span class="list-handle" sortable-handle aria-hidden="true"><i></i></span>
+  <button class="icon-button list-menu edit-only" data-act="list-menu" aria-label="List options"><svg aria-hidden="true"><use href="#i-more"/></svg></button>
+  <button class="add-card edit-only" data-act="add-card"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add a card</button>
+  <button class="add-list-tile edit-only" data-act="add-list"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add another list</button>
+
+  <div class="menu" id="menu" role="menu" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <dialog class="small-dialog" id="ask">
+    <form method="dialog" id="ask-form"><h2 id="ask-title"></h2><p id="ask-text" hidden></p><div id="ask-fields"></div>
+      <div class="form-actions"><button type="button" id="ask-cancel">Cancel</button><button type="submit" class="primary-button" id="ask-ok">OK</button></div></form>
+  </dialog>
+
+  <div class="backdrop" id="backdrop"></div>
+  <div class="detail-top"><div class="detail-cover" attr:data-color="Face.cover(item.$el)" class:has-image="!!Face.coverImage(item.$el)"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)"></span></div><header class="detail-header"><div class="breadcrumb"><span text="Board.name()"></span><svg aria-hidden="true"><use href="#i-chevron"/></svg>in list <b text="Detail.listTitle(item.$el)"></b><span class="num" text="'#' + Detail.num(item.$el)"></span></div><button class="icon-button detail-close" data-act="close-detail" aria-label="Close card"><svg aria-hidden="true"><use href="#i-close"/></svg></button></header></div>
+  <div class="detail-body"><div class="detail-scroll"><div class="detail-main"><section class="section desc-section"><div class="section-head"><svg aria-hidden="true"><use href="#i-description"/></svg><h3>Description</h3><button class="small-button spacer edit-only" data-act="edit-desc" show="!Detail.editingDesc()" text="Detail.hasDesc(item.$el) ? 'Edit' : 'Add'">Add</button></div><div class="description" show="!Detail.editingDesc() && Detail.hasDesc(item.$el)" effect="Detail.paintDesc(el, item.$el)"></div><p class="placeholder" show="!Detail.editingDesc() && !Detail.hasDesc(item.$el)" text="Detail.readOnly() ? 'No description.' : 'Add a more detailed description…'"></p><div class="desc-edit" show="Detail.editingDesc()"><textarea class="desc-editor" aria-label="Description"></textarea><div class="row-actions"><button class="primary-button" data-act="save-desc">Save</button><button data-act="cancel-desc">Cancel</button></div></div></section><section class="section checklists-section" show="!Detail.readOnly() || Detail.checklists(item.$el).length"><div class="section-head"><svg aria-hidden="true"><use href="#i-checklist"/></svg><h3>Checklists</h3><button class="small-button spacer edit-only" data-act="add-checklist">Add checklist</button></div><p class="placeholder" show="!Detail.checklists(item.$el).length">Break the work into steps.</p><div class="checklist-views" each="Detail.checklists(item.$el)" key="item.id"><template><div class="checklist" attr:data-checklist="item.id"><div class="checklist-head"><h4 text="item.name"></h4><span class="progress-label" text="item.text"></span><button class="icon-button edit-only" data-act="rename-checklist" aria-label="Rename checklist"><svg aria-hidden="true"><use href="#i-edit"/></svg></button><button class="icon-button edit-only" data-act="delete-checklist" aria-label="Delete checklist"><svg aria-hidden="true"><use href="#i-trash"/></svg></button></div><div class="track"><div class="fill" css:w="item.pct"></div></div><div class="check-rows" each="item.items" key="item.id"><template><div class="check-row" attr:data-item="item.id" class:done="item.done"><label class="check-hit"><input type="checkbox" data-act="toggle-item" attr:aria-label="item.text" attr:disabled="Detail.readOnly()" effect="el.checked = item.done"></label><button class="check-text" data-act="edit-item" attr:disabled="Detail.readOnly()" text="item.text"></button><span class="owner" effect="Detail.paintOwner(el, item.member)"></span><button class="icon-button row-tool edit-only" data-act="assign-item" aria-label="Assign"><svg aria-hidden="true"><use href="#i-user"/></svg></button><button class="icon-button row-tool edit-only" data-act="delete-item" aria-label="Delete item"><svg aria-hidden="true"><use href="#i-trash"/></svg></button></div></template></div><form class="add-item edit-only" data-act="add-item"><input name="itemText" placeholder="Add an item" aria-label="Add an item" maxlength="300" autocomplete="off"><button class="small-button">Add</button></form></div></template></div></section><section class="section attach-section" show="!Detail.readOnly() || Detail.attachments(item.$el).length"><div class="section-head"><svg aria-hidden="true"><use href="#i-attachment"/></svg><h3>Attachments</h3><button class="small-button spacer edit-only" data-act="add-link">Add link</button><button class="small-button edit-only" data-act="add-file">Add file</button></div><p class="placeholder" show="!Detail.attachments(item.$el).length">Links, images and files.</p><div class="attachment-grid" each="Detail.attachments(item.$el)" key="item.id"><template><div class="attachment" attr:data-attachment="item.id"><span class="attach-thumb" effect="Detail.paintThumb(el, item)"></span><div class="meta"><a class="attach-link" show="item.href && item.kind === 'link'" attr:href="item.href" target="_blank" rel="noopener noreferrer" text="item.name"></a><a class="attach-file" show="item.href && item.kind !== 'link'" attr:href="item.href" attr:download="item.name" target="_blank" rel="noopener noreferrer" text="item.name"></a><span show="!item.href" text="item.name"></span><small><span text="item.host"></span><button class="edit-only" data-act="cover-image" show="item.kind === 'image'" text="item.cover ? 'Remove cover' : 'Make cover'">Make cover</button><button class="edit-only" data-act="delete-attachment">Remove</button></small></div></div></template></div></section></div><aside class="detail-side"><div class="prop"><div class="prop-label">Labels</div><div class="prop-line"><span class="prop-chips" effect="Detail.paintLabels(el, item.$el)"></span><button class="add-pill edit-only" data-act="panel" data-panel="labels" aria-label="Edit labels"><svg aria-hidden="true"><use href="#i-plus"/></svg></button></div><div class="picker" show="Detail.panel() === 'labels'"><div class="picker-options" each="Detail.labelOptions(item.$el)" key="item.id"><template><label class="check-option"><input type="checkbox" data-act="toggle-label" attr:value="item.id" effect="el.checked = item.on"><span class="chip" attr:data-color="item.color" text="item.name"></span></label></template></div><p class="placeholder" show="!Detail.labelOptions(item.$el).length">No labels yet</p></div></div><div class="prop"><div class="prop-label">Members</div><div class="prop-line"><span class="prop-chips" effect="Detail.paintMembers(el, item.$el)"></span><button class="add-pill edit-only" data-act="panel" data-panel="members" aria-label="Edit members"><svg aria-hidden="true"><use href="#i-plus"/></svg></button></div><div class="picker" show="Detail.panel() === 'members'"><div class="picker-options" each="Detail.memberOptions(item.$el)" key="item.id"><template><label class="check-option"><input type="checkbox" data-act="toggle-member" attr:value="item.id" effect="el.checked = item.on"><span class="owner" effect="Detail.paintOwner(el, item.id)"></span><span text="item.label"></span></label></template></div><button class="small-button" data-act="add-me" show="Detail.canAddMe()">Add me</button><p class="placeholder" show="Detail.noTeam(item.$el)">Teammates appear here once they comment or are added on a shared board.</p></div></div><div class="prop"><div class="prop-label">Dates</div><div class="prop-line" show="Detail.readOnly()" effect="Detail.paintDatesRead(el, item.$el)"></div><div class="edit-only"><div class="dates"><span>Start</span><input type="date" data-act="set-date" data-field="start" aria-label="Start date" effect="Detail.fillDate(el, item.$el)"><span>Due</span><input type="date" data-act="set-date" data-field="due" aria-label="Due date" effect="Detail.fillDate(el, item.$el)"></div><label class="complete" show="Face.due(item.$el)"><input type="checkbox" data-act="toggle-complete" effect="el.checked = item.$el.hasAttribute('data-complete')">Complete <span class="due-flag" effect="Detail.paintDueFlag(el, item.$el)"></span></label></div></div><div class="prop edit-only"><div class="prop-label">Cover</div><div class="swatches"><button class="swatch none" data-act="set-cover" data-color="" aria-label="No cover" attr:aria-pressed="String(!item.$el.dataset.cover && !item.$el.dataset.coverImage)"></button><span class="swatch-list" each="Detail.swatches(item.$el)" key="item.color"><template><button class="swatch" data-act="set-cover" attr:data-color="item.color" attr:aria-label="item.color + ' cover'" attr:aria-pressed="String(item.on)"></button></template></span></div></div><section class="activity"><div class="section-head"><svg aria-hidden="true"><use href="#i-comment"/></svg><h3>Comments</h3><span class="spacer progress-label" text="Detail.comments(item.$el).length || ''"></span></div><form class="compose edit-only" data-act="post-comment" show="Detail.canComment()"><textarea name="text" placeholder="Write a comment…" aria-label="Write a comment" maxlength="4000"></textarea><button class="primary-button" type="submit">Post comment</button><p class="compose-note" role="alert" show="Detail.note()"><span text="Detail.note()"></span> <button type="submit" class="small-button">Retry</button></p></form><div class="comment-list" each="Detail.comments(item.$el)" key="item.id"><template><div class="comment" attr:data-comment="item.id"><span class="comment-avatar" effect="Detail.paintCommentAvatar(el, item.by)"></span><div class="comment-body"><div class="comment-head"><strong text="item.name"></strong><time attr:datetime="item.at" text="item.when"></time></div><div class="comment-text" text="item.text"></div><span class="comment-tools" show="item.mine"><button data-act="edit-comment">Edit</button><button data-act="delete-comment">Delete</button></span></div></div></template></div><p class="placeholder" show="Detail.readOnly() && !Detail.comments(item.$el).length">No comments.</p></section></aside></div><footer class="detail-footer edit-only"><button class="text-button" data-act="move-card"><svg aria-hidden="true"><use href="#i-move"/></svg>Move</button><button class="text-button" data-act="copy-card"><svg aria-hidden="true"><use href="#i-copy"/></svg>Copy</button><button class="text-button danger" data-act="delete-card"><svg aria-hidden="true"><use href="#i-trash"/></svg>Delete</button><button class="text-button close-text" data-act="close-detail">Close</button></footer></div>
+  <input type="file" id="file-input" hidden multiple>
+</template>
+
+<!-- A new card's face is saved content, so its blueprint stays unmarked and is saved with the file. -->
+<template id="face-blueprint"><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)"></span><span class="cover" show="Face.cover(item.$el) && !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)"></span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)"></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"/></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"/></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)"><svg aria-hidden="true"><use href="#i-comment"/></svg><span text="Face.comments(item.$el)"></span></span><span class="badge" title="Attachments" show="Face.files(item.$el)"><svg aria-hidden="true"><use href="#i-attachment"/></svg><span text="Face.files(item.$el)"></span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)"></span></span></button></div></template>
+
+<script></script>
+<script></script>
+<script src="https://clayjs.com/v1/clay.js?plugins=sortable,people,upload,sync"></script>
+<script src="https://clayjs.com/v1/sap.js"></script>
+<script src="https://clayjs.com/v1/clay-router.js"></script>
+<div id="api-seeds" cms-template sap-ignore hidden>
+<ol class="cards">
+<li class="card" item data-id="" data-num="" cms-template><div class="card-face"><button class="card-open" data-act="open-card" attr:data-card="item.$key"><span class="cover-img" show="Face.coverImage(item.$el)" css:img="Face.coverImageCss(item.$el)"></span><span class="cover" show="Face.cover(item.$el) && !Face.coverImage(item.$el)" attr:data-color="Face.cover(item.$el)"></span><span class="face-chips" show="Face.labels(item.$el).length" each="Face.labels(item.$el)" key="item.id"><template><span class="chip" attr:data-color="item.color" text="item.name"></span></template></span><span class="face-title" text="Face.title(item.$el)"></span><span class="face-bottom" show="Face.hasBottom(item.$el)"><span class="badges"><span class="due-slot" clay="freeze" show="Face.due(item.$el)" effect="Face.paintDue(el, item.$el)"></span><span class="badge" title="Has a description" show="Face.hasDesc(item.$el)"><svg aria-hidden="true"><use href="#i-description"/></svg></span><span class="badge" title="Checklist" show="Face.checklist(item.$el).total" class:all-done="Face.checklist(item.$el).allDone"><svg aria-hidden="true"><use href="#i-checklist"/></svg><span text="Face.checklist(item.$el).text"></span></span><span class="badge" title="Comments" show="Face.comments(item.$el)"><svg aria-hidden="true"><use href="#i-comment"/></svg><span text="Face.comments(item.$el)"></span></span><span class="badge" title="Attachments" show="Face.files(item.$el)"><svg aria-hidden="true"><use href="#i-attachment"/></svg><span text="Face.files(item.$el)"></span></span></span><span class="avatars" clay="freeze" show="Face.members(item.$el).length" effect="Face.paintAvatars(el, item.$el)"></span></span></button></div><h3 class="card-title" editmode:contenteditable contenteditable="plaintext-only"></h3><section class="checklist" data-id="" cms-template><h4></h4><ul class="checklist-items"><li data-id="" cms-template></li></ul></section><ul class="attachments"><li data-id="" cms-template><a href="" data-kind=""></a></li></ul><ol class="comments"><li data-id="" data-at="" cms-template></li></ol></li>
+</ol>
+</div>
+</body>
+</html>
