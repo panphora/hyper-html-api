@@ -33,9 +33,11 @@ export class ShapeMismatch extends Error {
 }
 
 export class EmptyListInsert extends Error {
-  constructor(path) {
+  constructor(path, reason) {
     super(
-      `cannot add items to empty list at "${path.join('.')}" — no sibling to clone as template. Seed the list with a hidden item first.`,
+      reason
+        ? `cannot add items to empty list at "${path.join('.')}" — ${reason}`
+        : `cannot add items to empty list at "${path.join('.')}" — no sibling to clone as template. Seed the list with a hidden item first.`,
     )
     this.name = 'EmptyListInsert'
     this.path = path

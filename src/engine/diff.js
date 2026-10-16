@@ -1,5 +1,6 @@
 import { EmptyListInsert } from './errors.js'
 import { extract } from './extract.js'
+import { finalChildCombinatorLeft } from './rule-syntax.js'
 import { matchRows } from './row-match.js'
 
 /**
@@ -47,10 +48,11 @@ export function listDiff(adapter, parentCtx, selector, shape, newItems, trace, a
 
   const matches = matchRows(newItems, oldValues, shape, lockSuppliedRows(adapter, oldNodes, newItems, trace, opts))
 
-  const referenceNode = oldNodes[0] || templateSource
-  const parent = adapter.parent(referenceNode)
+  const parent = oldNodes.length > 0
+    ? adapter.parent(oldNodes[0])
+    : destinationFor(adapter, parentCtx, selector, templateSource, trace, opts)
   const anchorIdx = oldNodes.length > 0
-    ? indexInParent(adapter, parent, referenceNode)
+    ? indexInParent(adapter, parent, oldNodes[0])
     : 0
   const contiguous = isContiguousRun(adapter, oldNodes)
 
@@ -177,17 +179,95 @@ function indexInParent(adapter, parent, targetNode) {
 // product's variant) is found even when the immediate container has none.
 function findFallbackTemplate(adapter, parentCtx, selector, opts) {
   if (!opts.templateAttr) return null
+  // A leading ":scope >" anchors a row to its own context, so an ancestor seed
+  // bank can never answer that query: no element is a direct child of its own
+  // descendant. Dropping just that anchor searches the ancestors for the rest of
+  // the selector, so a checklist item seed still cannot pass for a comment seed.
+  const search = selector.replace(/^\s*:scope\s*>\s*/, '')
   let scope = parentCtx
   while (scope) {
     // templateAttr:null opts out of the adapter's default cms-template skip — the
     // fallback lookup MUST see the seed element to clone it for grow-from-zero.
-    const candidates = adapter.find(scope, selector, { includeRulesTag: false, templateAttr: null })
+    const candidates = adapter.find(scope, search, { includeRulesTag: false, templateAttr: null })
     for (const n of candidates) {
       if (adapter.attr(n, opts.templateAttr) != null) return n
     }
     scope = adapter.parent(scope)
   }
   return null
+}
+
+// Where the rows of an empty list go. The clone source says what a row looks
+// like; the selector's container inside the context says where rows live. The
+// seed's own parent stands in only while the seed sits in a container of this
+// context that is not itself a seed bank: a bank holds blueprints for lists, so
+// inserting next to it wrote the row where every later read skips it.
+function destinationFor(adapter, parentCtx, selector, templateSource, trace, opts) {
+  const container = finalChildCombinatorLeft(selector)
+  if (!container) {
+    const seedParent = adapter.parent(templateSource)
+    if (seedParent && isWithin(adapter, parentCtx, seedParent) && !isSeedOrNoData(adapter, seedParent, opts)) {
+      return seedParent
+    }
+    throw new EmptyListInsert(
+      trace.path,
+      `the list selector "${selector}" names no container to hold the new rows — write it as "container > row" (for example "ol.comments > li") so the cloned row lands in the list`,
+    )
+  }
+  // ":scope" names the context itself. A document or a fragment is not a
+  // container that can hold rows, and placing a row at index zero of one would
+  // put it outside <html>, so it counts as no destination at all.
+  // find() already scopes the query to the context, so every candidate belongs
+  // to it; a candidate inside a seed bank or a no-data region does not.
+  const found = container === ':scope'
+    ? (adapter.prop(parentCtx, 'tagName') ? [parentCtx] : [])
+    : adapter.find(parentCtx, container, opts)
+  const destinations = found.filter((node) => !isSeedOrNoData(adapter, node, opts))
+  if (destinations.length === 0) {
+    throw new EmptyListInsert(
+      trace.path,
+      `no container matching "${container}" inside this context to hold the new rows`,
+    )
+  }
+  if (destinations.length > 1) {
+    throw new EmptyListInsert(
+      trace.path,
+      `"${container}" matches ${destinations.length} containers inside this context, so the new rows have no single destination`,
+    )
+  }
+  return destinations[0]
+}
+
+function isWithin(adapter, ancestor, node) {
+  let current = node
+  while (current) {
+    if (adapter.sameNode(current, ancestor)) return true
+    current = adapter.parent(current)
+  }
+  // A document (or cheerio's root) is not an element, so a parentElement walk
+  // from inside it stops at <html> and never reaches it. Ask the adapter whether
+  // it sees the node from there instead; a detached node in another tree stays
+  // outside, because that query cannot see it either.
+  if (adapter.parent(ancestor)) return false
+  return adapter
+    .find(ancestor, '*', { includeRulesTag: true, templateAttr: null })
+    .some((n) => adapter.sameNode(n, node))
+}
+
+// The no-data tokens the adapters already filter reads with, read here through
+// the adapter so both of them answer the same way.
+const NO_DATA_ATTRS = ['no-data', 'editor-ui']
+
+function isSeedOrNoData(adapter, node, opts) {
+  let current = node
+  while (current) {
+    if (opts.templateAttr && adapter.attr(current, opts.templateAttr) != null) return true
+    if (NO_DATA_ATTRS.some((name) => adapter.attr(current, name) != null)) return true
+    const clay = adapter.attr(current, 'clay')
+    if (clay && clay.split(/\s+/).some((token) => NO_DATA_ATTRS.includes(token))) return true
+    current = adapter.parent(current)
+  }
+  return false
 }
 
 // Puts finalNodes at anchorIdx onward among the parent's content children and leaves every other

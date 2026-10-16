@@ -41,3 +41,38 @@ export function splitRule(rule) {
   if (at === -1) return { selector: rule, prop: null }
   return { selector: rule.slice(0, at), prop: rule.slice(at + 1) || null }
 }
+
+// The list grammar needs a second split: "container > row" says where a row
+// goes. Only the FINAL top-level ">" separates them, and a ">" inside brackets,
+// parens or quotes is not a combinator at all: a[data-note="a > b"] and
+// :is(a > b) both carry one, and splitting there names a container that cannot
+// exist. A top-level "," is a group whose members may name different
+// containers, so the fallback refuses it rather than guessing one of them.
+//
+// Left side of that final top-level ">", or null when the selector has none.
+export function finalChildCombinatorLeft(selector) {
+  let depth = 0
+  let quote = null
+  let found = -1
+  let group = false
+  for (let i = 0; i < selector.length; i++) {
+    const ch = selector[i]
+    if (ch === '\\') {
+      i++
+    } else if (quote) {
+      if (ch === quote) quote = null
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (ch === '[' || ch === '(') {
+      depth++
+    } else if (ch === ']' || ch === ')') {
+      if (depth > 0) depth--
+    } else if (depth === 0 && ch === '>') {
+      found = i
+    } else if (depth === 0 && ch === ',') {
+      group = true
+    }
+  }
+  if (group || found === -1) return null
+  return selector.slice(0, found).trim() || null
+}
