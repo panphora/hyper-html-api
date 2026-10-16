@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.11.0] - 2026-10-16
+
+### Added
+- An empty list can grow from a seed row kept in a hidden seed bank; the new row goes into the list's own container
+- writeDocument checks that the written document reads back as the data it was given, for the keys written
+- An ES module build of the data engine for ClayJS
+
+### Changed
+- An attribute rule reads `""` when the attribute is present and empty and `null` when it is absent; writing `null` removes the attribute
+- CMS scaffolds leave attribute fields absent unless the row selector requires them
+
+### Fixed
+- Boolean attributes such as `hidden` and `open` read and write the same way on the server and in the browser
+- Writing into a browser page updates what textareas, inputs and options show, including in rows cloned from a row someone typed into
+- copy-to-clayjs --check compares against a fresh build
+
+
+
 ## [0.10.1] - 2026-10-15
 
 ### Changed
