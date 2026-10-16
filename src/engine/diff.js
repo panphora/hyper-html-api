@@ -184,7 +184,10 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
   // descendant. Dropping just that anchor searches the ancestors for the rest of
   // the selector, so a checklist item seed still cannot pass for a comment seed.
   const anchored = /^\s*:scope\s*>\s*/.test(selector)
-  const search = selector.replace(/^\s*:scope\s*>\s*/, '')
+  // A row selector that excludes seeds by hand (":not([cms-template])") would hide
+  // the very seed this lookup is for.
+  const exclusion = new RegExp(':not\\(\\[' + opts.templateAttr.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '\\]\\)', 'g')
+  const search = selector.replace(/^\s*:scope\s*>\s*/, '').replace(exclusion, '')
   // The stripped anchor makes the rest of the selector far too loose on its own:
   // "p" or "div" matches any seed in any ancestor, including the seed bank root
   // itself. The seed's own selector says how deep its row's context sits and what

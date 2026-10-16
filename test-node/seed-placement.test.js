@@ -254,3 +254,19 @@ test('a ".groups > ul + ol li" write lands in the ol through writeDocument and a
   assert.deepEqual([...document.querySelectorAll('.groups > ol > li:not([cms-template])')].map((el) => el.textContent.trim()), ['new'])
   assert.deepEqual(extractData(document), data)
 })
+
+for (const env of envs) {
+  test(`seed placement [${env.label}] — a row selector that excludes seeds by hand still grows an empty list from its seed`, () => {
+    const rules = {
+      lists: ['main > section.list', {
+        title: 'h3',
+        items: [':scope > ul > li:not([cms-template])', { name: '@textContent' }],
+      }],
+    }
+    const html = `<main><section class="list"><h3>A</h3><ul><li cms-template>seed</li></ul></section></main>`
+    const data = { lists: [{ title: 'A', items: [{ name: 'first' }, { name: 'second' }] }] }
+    const ctx = env.make(html)
+    apply(ctx.adapter, ctx.root, rules, data, OPT)
+    assert.deepEqual(extract(ctx.adapter, ctx.root, rules, OPT), data)
+  })
+}
