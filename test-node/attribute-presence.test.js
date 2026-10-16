@@ -158,3 +158,46 @@ for (const env of envs) {
     assert.deepEqual(cloned.items, [{ name: 'X', done: null }], 'the clone lost its seed marker and the write was allowed')
   })
 }
+
+for (const env of envs) {
+  test(`${env.label}: HTML boolean attributes read "" like every other empty attribute`, () => {
+    const { adapter, root } = env.make(
+      '<p class="a" hidden>A</p><details class="d" open>D</details><input class="i" required>',
+    )
+    assert.deepEqual(
+      extract(adapter, root, { hidden: '.a@hidden', open: '.d@open', required: '.i@required' }),
+      { hidden: '', open: '', required: '' },
+    )
+  })
+
+  test(`${env.label}: "" writes and null removes an HTML boolean attribute`, () => {
+    const { adapter, root, has } = env.make('<details class="d">D</details>')
+    const rules = { open: '.d@open' }
+    apply(adapter, root, rules, { open: '' })
+    assert.ok(has('.d', 'open'), 'the attribute is present after writing ""')
+    assert.equal(extract(adapter, root, rules).open, '')
+    apply(adapter, root, rules, { open: null })
+    assert.equal(has('.d', 'open'), false, 'null removes the attribute')
+    assert.equal(extract(adapter, root, rules).open, null)
+  })
+}
+
+for (const [attr, html] of [
+  ['open', '<details id="x">Text</details>'],
+  ['hidden', '<p id="x">Text</p>'],
+  ['required', '<input id="x">'],
+]) {
+  test(`writeDocument: "" sets ${attr} and null removes it`, () => {
+    const rules = { value: `#x@${attr}` }
+    const set = writeDocument(load, html, { value: '' }, { rules })
+    assert.equal(set.changed, true)
+    assert.ok(set.html.includes(`${attr}=""`), `the source carries ${attr}=""`)
+    assert.equal(extract(cheerioAdapter, cheerio.load(set.html).root(), rules).value, '')
+    assert.equal(writeDocument(load, set.html, { value: '' }, { rules }).changed, false)
+
+    const removed = writeDocument(load, set.html, { value: null }, { rules })
+    assert.equal(removed.changed, true)
+    assert.equal(cheerio.load(removed.html)('#x').attr(attr), undefined, 'the attribute is gone')
+    assert.equal(extract(cheerioAdapter, cheerio.load(removed.html).root(), rules).value, null)
+  })
+}

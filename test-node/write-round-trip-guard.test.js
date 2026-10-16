@@ -123,7 +123,10 @@ test('a missing nested target throws instead of returning a false success', () =
 })
 
 test('a value the serialized source cannot carry throws', () => {
-  const sentinel = 'SENTINEL\r9c4d'
+  // A NUL is the one thing the parser rewrites rather than normalizes: it
+  // becomes U+FFFD, so the value cannot come back. A CRLF can, and does not
+  // throw (see the newline-normalization tests below).
+  const sentinel = 'SENTINEL\u00009c4d'
   assert.throws(
     () => writeDocument(load, SRC, { note: sentinel }),
     (err) => {
@@ -133,4 +136,46 @@ test('a value the serialized source cannot carry throws', () => {
       return true
     },
   )
+})
+
+test('a CRLF value is accepted as the newline-normalized text the source keeps', () => {
+  const text = writeDocument(load, SRC, { title: 'line1\r\nline2' })
+  assert.equal(text.changed, true)
+  assert.equal(read(text.html).title, 'line1\nline2')
+
+  const exact = writeDocument(load, SRC, { body: 'line1\r\nline2' })
+  assert.equal(exact.changed, true)
+  assert.equal(read(exact.html).body, 'line1\nline2')
+})
+
+test('a leading newline the parser drops after pre/textarea is accepted', () => {
+  const html =
+    '<script data-rules-name="api" data-rules-version="1">{pre:"pre@textContent",ta:"textarea@textContent"}</script>' +
+    '<pre></pre><textarea></textarea>'
+  const result = writeDocument(load, html, { pre: '\nline1', ta: '\nhello' })
+  assert.equal(result.changed, true)
+  assert.equal(read(result.html).pre, 'line1')
+  assert.equal(read(result.html).ta, 'hello')
+})
+
+test('a selector that depends on the value being written is still refused', () => {
+  const rules = { state: '#t@data-state', openLabel: '#t[data-state="open"] > b' }
+  const html = '<div id="t" data-state="open"><b>Open</b></div>'
+  assert.equal(extract(cheerioAdapter, cheerio.load(html).root(), rules).openLabel, 'Open')
+  assert.throws(
+    () => writeDocument(load, html, { state: 'closed', openLabel: 'Open' }, { rules }),
+    (err) => {
+      assert.ok(err instanceof WriteNotRoundTripped)
+      assert.deepEqual(err.path, ['openLabel'])
+      return true
+    },
+  )
+})
+
+test('a partial write verifies only the rules it wrote', () => {
+  const rules = { title: 'h1', broken: 'p:::' }
+  const result = writeDocument(load, '<h1>T</h1><p>x</p>', { title: 'W' }, { rules })
+  assert.equal(result.changed, true)
+  assert.ok(result.html.includes('<h1>W</h1>'))
+  assert.equal(result.html.includes('<p>x</p>'), true)
 })

@@ -41,7 +41,26 @@ export function writeDocument(load, src, data, options = {}) {
     : spliceDocument(load, src, $, tracker)
   // The in-memory tree is not the contract: only the source the caller gets
   // back is. Re-parse it and compare the caller's projection, so a write that
-  // serialization dropped throws instead of returning a false success.
-  assertRoundTrip(rules, data, extract(cheerioAdapter, load(html).root(), rules, opts))
+  // serialization dropped throws instead of returning a false success. Only the
+  // rules the payload names are re-extracted: a one-field write on a large page
+  // pays for the field it wrote, not for every rule in the document.
+  const written = writtenRules(rules, data)
+  assertRoundTrip(written, data, extract(cheerioAdapter, load(html).root(), written, opts))
   return { html, changed: html !== src, spliced }
+}
+
+// The top-level subset of `rules` that the payload names, which is exactly what
+// the guard checks: an omitted rule is not part of this write and must not be
+// able to fail it. A scalar or list rule already IS the whole projection.
+function writtenRules(rules, data) {
+  if (!isPlainObject(rules) || !isPlainObject(data)) return rules
+  const subset = {}
+  for (const key of Object.keys(data)) {
+    if (Object.prototype.hasOwnProperty.call(rules, key)) subset[key] = rules[key]
+  }
+  return subset
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

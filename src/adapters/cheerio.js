@@ -128,8 +128,12 @@ const cheerioAdapter = {
 
   attr(node, name, value) {
     if (value === undefined) {
-      const v = node.attr(name)
-      return v !== undefined ? v : null
+      // Read the raw attribs map rather than .attr(): cheerio's getter returns
+      // the attribute NAME for HTML boolean attributes (hidden, open, required,
+      // multiple, autofocus...), which is not what the DOM adapter reports.
+      const attribs = node[0] && node[0].attribs
+      if (!attribs || !Object.prototype.hasOwnProperty.call(attribs, name)) return null
+      return attribs[name]
     }
     node.attr(name, value)
   },

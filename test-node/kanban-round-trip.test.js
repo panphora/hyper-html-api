@@ -33,7 +33,7 @@ const copy = (value) => JSON.parse(JSON.stringify(value))
 const allCards = (data) => data.lists.flatMap((list) => list.cards)
 const cardOf = (data, id) => allCards(data).find((card) => card.id === id)
 const card = (id, num, title) => ({
-  id, num, title, desc: null, labels: null, cover: null, coverImage: null,
+  id, num, title, desc: '', labels: null, cover: null, coverImage: null,
   due: null, start: null, complete: null, members: null,
   checklists: [], comments: [], attachments: [],
 })
@@ -202,6 +202,24 @@ test('every card in one list is deleted and one is added back', () => {
   assert.equal(rows.length, 1)
   assert.equal(rows.attr('data-id'), 'c-new')
   assert.equal(rows.children('h3.card-title').text(), 'Fresh card')
+  assert.equal($('#api-seeds ol.cards > li.card:not([cms-template])').length, 0)
+  assert.equal(bankOf(second.html), BANK)
+})
+
+test('a card added to an emptied list keeps its description', () => {
+  const emptied = copy(BASE)
+  emptied.lists[0].cards = []
+  const first = roundTrip(emptied)
+
+  const next = copy(read(first.html))
+  const added = card('c-new-desc', '16', 'Visitor card')
+  added.desc = 'Visitor notes'
+  next.lists[0].cards.push(added)
+  const second = roundTrip(next, first.html)
+  const $ = load(second.html)
+  const row = $('#board > section.list[data-id="l-ideas"] > ol.cards > li.card')
+  assert.equal(row.length, 1)
+  assert.equal(row.children('div.card-desc').text(), 'Visitor notes')
   assert.equal($('#api-seeds ol.cards > li.card:not([cms-template])').length, 0)
   assert.equal(bankOf(second.html), BANK)
 })

@@ -37,13 +37,13 @@
     "./write": "./src/write.js"
   },
   "scripts": {
-    "build": "npx esbuild src/hyper-html-api.js --bundle --minify --format=iife --global-name=HyperHtmlApi --outfile=dist/hyper-html-api.min.js",
+    "build": "npx esbuild src/hyper-html-api.js --bundle --minify --format=iife --global-name=HyperHtmlApi --outfile=dist/hyper-html-api.min.js && npm run build:engine && npm run build:engine:esm",
     "build:engine": "npx esbuild src/data.js --bundle --minify --format=iife --global-name=hyperHtmlApiData --outfile=dist/hyper-html-api.engine.min.js",
     "build:engine:esm": "npx esbuild src/data.js --bundle --minify --format=esm --outfile=dist/hyper-html-api.engine.esm.js",
     "build:upgrade": "npx esbuild src/upgrade.js --bundle --minify --format=iife --global-name=hyperHtmlApiUpgrade --outfile=dist/hyper-html-api.upgrade.min.js",
     "copy-to-hyperclayjs": "npm run build:engine && npm run build:upgrade && node scripts/copy-to-hyperclayjs.js",
     "copy-to-clayjs": "npm run build:engine && npm run build:engine:esm && node scripts/copy-to-clayjs.js",
-    "prepublishOnly": "npm run build && npm run build:engine && npm run build:upgrade",
+    "prepublishOnly": "npm run build && npm run build:upgrade",
     "demo": "http-server . -p 5693 -c-1 -o /demo/",
     "test": "web-test-runner",
     "test:debug": "web-test-runner --manual --open",
