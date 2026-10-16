@@ -105,6 +105,9 @@ export function guardAdapter(adapter, policy = WRITE_POLICY) {
       if (value === undefined) return adapter.attr(node, name)
       if (allowAttr(node, name, value)) adapter.attr(node, name, value)
     },
+    removeAttr(node, name) {
+      if (allowAttr(node, name, null)) adapter.removeAttr(node, name)
+    },
     prop(node, name, value) {
       if (value === undefined) return adapter.prop(node, name)
       if (policy.refusedRuleForms.includes(name)) return refuse(node, `"@${name}" writes HTML, only text is allowed`)

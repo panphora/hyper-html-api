@@ -93,5 +93,5 @@ function readPropOrAttr(adapter, node, name) {
     return v == null ? null : String(v)
   }
   const v = adapter.attr(node, name)
-  return v ? v : null
+  return v == null ? null : v
 }

@@ -126,8 +126,12 @@ function writePropOrAttr(adapter, node, name, value) {
     if (adapter.prop(node, name) !== next) adapter.prop(node, name, next)
     return node
   }
-  const next = value == null ? '' : String(value)
-  if (adapter.attr(node, name) !== next) adapter.attr(node, name, next)
+  if (value == null) {
+    if (adapter.attr(node, name) != null) adapter.removeAttr(node, name)
+  } else {
+    const next = String(value)
+    if (adapter.attr(node, name) !== next) adapter.attr(node, name, next)
+  }
   return node
 }
 

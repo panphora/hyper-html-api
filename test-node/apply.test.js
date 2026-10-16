@@ -141,7 +141,7 @@ for (const env of envs) {
     assert.equal(serialize(), before)
   })
 
-  test(`apply [${env.label}] — @attr write: sets, blanks on null, blanks on ""`, () => {
+  test(`apply [${env.label}] — @attr write: sets, removes on null, keeps "" as present`, () => {
     // data-link instead of href so DOM doesn't normalize (a.href → absolute
     // URL with trailing slash) — this tests the attr path, not the prop path.
     const { adapter, root } = env.make(
@@ -153,10 +153,10 @@ for (const env of envs) {
     assert.equal(extract(adapter, root, rules).link, 'two')
 
     apply(adapter, root, rules, { link: null })
-    assert.equal(extract(adapter, root, rules).link, null) // extract collapses "" → null
+    assert.equal(extract(adapter, root, rules).link, null)
 
     apply(adapter, root, rules, { link: '' })
-    assert.equal(extract(adapter, root, rules).link, null)
+    assert.equal(extract(adapter, root, rules).link, '')
   })
 
   test(`apply [${env.label}] — deep apply (21 levels) throws MaxRuleDepthExceeded`, () => {
