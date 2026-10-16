@@ -13,6 +13,32 @@ function resolveSearchRoot(ctx) {
   return ctx
 }
 
+function mirrorLiveState(node, name, value) {
+  if (!node || node.nodeType !== 1) return
+  if (name === 'value' && node.tagName === 'INPUT') node.value = value === null ? '' : value
+  else if (name === 'checked' && node.tagName === 'INPUT') node.checked = value !== null
+  else if (name === 'selected' && node.tagName === 'OPTION') node.selected = value !== null
+}
+
+function syncTextareaValue(node, value) {
+  if (node && node.tagName === 'TEXTAREA') node.value = value
+}
+
+function resetFormState(node) {
+  if (!node || node.nodeType !== 1) return
+  const controls = [node, ...(node.querySelectorAll ? node.querySelectorAll('textarea, input, option') : [])]
+  for (const control of controls) {
+    if (control.tagName === 'TEXTAREA') {
+      control.value = control.defaultValue
+    } else if (control.tagName === 'INPUT') {
+      if (control.type !== 'file') control.value = control.defaultValue
+      control.checked = control.defaultChecked
+    } else if (control.tagName === 'OPTION') {
+      control.selected = control.defaultSelected
+    }
+  }
+}
+
 const dom = {
   semanticExclude: true,
   find(ctx, selector, opts = {}) {
@@ -50,6 +76,7 @@ const dom = {
   text(node, value) {
     if (value === undefined) return (node.textContent || '').trim()
     node.textContent = value
+    syncTextareaValue(node, value)
   },
 
   attr(node, name, value) {
@@ -57,10 +84,12 @@ const dom = {
       return node.hasAttribute && node.hasAttribute(name) ? node.getAttribute(name) : null
     }
     node.setAttribute(name, value)
+    mirrorLiveState(node, name, value)
   },
 
   removeAttr(node, name) {
     if (node && node.removeAttribute) node.removeAttribute(name)
+    mirrorLiveState(node, name, null)
   },
 
   prop(node, name, value) {
@@ -72,7 +101,9 @@ const dom = {
   },
 
   clone(node) {
-    return node.cloneNode(true)
+    const copy = node.cloneNode(true)
+    resetFormState(copy)
+    return copy
   },
 
   insertAt(parent, node, index) {
@@ -167,6 +198,7 @@ export function createDomAdapter(operationRoot, opts = {}) {
       for (const child of Array.from(template.content.childNodes)) target.insertBefore(child, anchor || null)
     } else {
       target.insertBefore(outputDocument.createTextNode(value), anchor || null)
+      syncTextareaValue(target, value)
     }
     const filteredView = createContentView(target, { capability: 'data', exclude: opts.exclude || null })
     copy.replaceChildren(...Array.from(filteredView.root?.childNodes || []))
@@ -259,7 +291,10 @@ export function createDomAdapter(operationRoot, opts = {}) {
     },
     clone(node) {
       const copy = projected(node)
-      return copy === node ? dom.clone(node) : outputDocument.importNode(copy, true)
+      if (copy === node) return dom.clone(node)
+      const clone = outputDocument.importNode(copy, true)
+      resetFormState(clone)
+      return clone
     },
     insertAt(parent, node, index) {
       const targetParent = live(parent)
