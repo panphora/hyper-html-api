@@ -103,6 +103,10 @@ const cheerioAdapter = {
     return p && p.length ? p : null
   },
 
+  matches(node, selector) {
+    return !!node && node.length > 0 && isElement(node) && node.is(selector)
+  },
+
   children(node) {
     if (!node || !node.children) return []
     const kids = node.children()

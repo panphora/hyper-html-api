@@ -49,7 +49,12 @@ export function splitRule(rule) {
 // exist. A top-level "," is a group whose members may name different
 // containers, so the fallback refuses it rather than guessing one of them.
 //
-// Left side of that final top-level ">", or null when the selector has none.
+// What follows that ">" also has to be the ONE compound selector it introduces.
+// "ul > li span" and "ul > li + li" put the row below that ">", so its left
+// side is not the row's parent and cannot stand in as the row's container.
+//
+// Left side of that final top-level ">", or null when the selector names no
+// container for the row.
 export function finalChildCombinatorLeft(selector) {
   let depth = 0
   let quote = null
@@ -74,5 +79,36 @@ export function finalChildCombinatorLeft(selector) {
     }
   }
   if (group || found === -1) return null
+  if (!isSingleCompound(selector, found + 1)) return null
   return selector.slice(0, found).trim() || null
+}
+
+// The text after the ">", ignoring the whitespace that belongs to the
+// combinator itself, is a single compound selector when no top-level
+// descendant, "+" or "~" follows it. Depth and quotes are tracked the same way
+// as above, so whitespace inside a[title="a b"] or :is(a b) is not a
+// combinator.
+function isSingleCompound(selector, start) {
+  let i = start
+  const end = selector.replace(/\s+$/, '').length
+  while (i < end && /\s/.test(selector[i])) i++
+  let depth = 0
+  let quote = null
+  for (; i < end; i++) {
+    const ch = selector[i]
+    if (ch === '\\') {
+      i++
+    } else if (quote) {
+      if (ch === quote) quote = null
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (ch === '[' || ch === '(') {
+      depth++
+    } else if (ch === ']' || ch === ')') {
+      if (depth > 0) depth--
+    } else if (depth === 0 && (ch === '+' || ch === '~' || /\s/.test(ch))) {
+      return false
+    }
+  }
+  return true
 }

@@ -43,6 +43,10 @@ const dom = {
     return node ? Array.from(node.children) : []
   },
 
+  matches(node, selector) {
+    return !!(node && node.matches) && node.matches(selector)
+  },
+
   text(node, value) {
     if (value === undefined) return (node.textContent || '').trim()
     node.textContent = value

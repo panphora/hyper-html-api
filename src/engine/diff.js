@@ -183,32 +183,98 @@ function findFallbackTemplate(adapter, parentCtx, selector, opts) {
   // bank can never answer that query: no element is a direct child of its own
   // descendant. Dropping just that anchor searches the ancestors for the rest of
   // the selector, so a checklist item seed still cannot pass for a comment seed.
+  const anchored = /^\s*:scope\s*>\s*/.test(selector)
   const search = selector.replace(/^\s*:scope\s*>\s*/, '')
+  // The stripped anchor makes the rest of the selector far too loose on its own:
+  // "p" or "div" matches any seed in any ancestor, including the seed bank root
+  // itself. The seed's own selector says how deep its row's context sits and what
+  // that node has to look like, and its container has to be the one it names, so
+  // a person seed under div.people cannot answer for a checklist.
+  const steps = anchored ? childSteps(search) : 0
+  const container = finalChildCombinatorLeft(search)
   let scope = parentCtx
   while (scope) {
     // templateAttr:null opts out of the adapter's default cms-template skip — the
     // fallback lookup MUST see the seed element to clone it for grow-from-zero.
     const candidates = adapter.find(scope, search, { includeRulesTag: false, templateAttr: null })
     for (const n of candidates) {
-      if (adapter.attr(n, opts.templateAttr) != null) return n
+      if (adapter.attr(n, opts.templateAttr) == null) continue
+      if (anchored && !matchesContextShape(adapter, parentCtx, n, steps)) continue
+      if (container && !adapter.matches(adapter.parent(n), container)) continue
+      return n
     }
     scope = adapter.parent(scope)
   }
   return null
 }
 
+// How many top-level child steps a stripped selector walks through ("p" is one,
+// "ul.checklist-items > li" is two), or null when a descendant, "+" or "~"
+// combinator makes the row's own context uncountable.
+function childSteps(selector) {
+  let depth = 0
+  let quote = null
+  let steps = 1
+  for (let i = 0; i < selector.length; i++) {
+    const ch = selector[i]
+    if (ch === '\\') {
+      i++
+    } else if (quote) {
+      if (ch === quote) quote = null
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (ch === '[' || ch === '(') {
+      depth++
+    } else if (ch === ']' || ch === ')') {
+      if (depth > 0) depth--
+    } else if (depth === 0 && ch === '>') {
+      steps++
+    } else if (depth === 0 && (ch === '+' || ch === '~' || /\s/.test(ch))) {
+      return null
+    }
+  }
+  return steps
+}
+
+// The node a stripped ":scope > ..." seed's own selector climbs to has to have
+// this context's shape: the same tag, and every class this context carries. A
+// bank's row seed reaches a seed of its own kind, while an unrelated seed
+// (a person seed's div.people, the bank root's body) reaches something else.
+function matchesContextShape(adapter, parentCtx, candidate, steps) {
+  if (steps === null) return true
+  let node = candidate
+  for (let i = 0; i < steps; i++) {
+    node = adapter.parent(node)
+    if (!node) return false
+  }
+  const contextTag = adapter.prop(parentCtx, 'tagName')
+  // A document or fragment context has no tag or class of its own to compare.
+  if (!contextTag) return true
+  const tag = adapter.prop(node, 'tagName')
+  if (!tag || String(tag).toLowerCase() !== String(contextTag).toLowerCase()) return false
+  const own = new Set(classNames(adapter, node))
+  return classNames(adapter, parentCtx).every((name) => own.has(name))
+}
+
+function classNames(adapter, node) {
+  const value = adapter.attr(node, 'class')
+  return value ? String(value).split(/\s+/).filter(Boolean) : []
+}
+
 // Where the rows of an empty list go. The clone source says what a row looks
-// like; the selector's container inside the context says where rows live. The
-// seed's own parent stands in only while the seed sits in a container of this
-// context that is not itself a seed bank: a bank holds blueprints for lists, so
-// inserting next to it wrote the row where every later read skips it.
+// like; the selector's container inside the context says where rows live. A seed
+// that sits in a container of this context knows its own list, and stands in for
+// the selector whatever it looks like: the last ">" in a selector can trail a
+// descendant or sibling combinator, and then the text left of it is not the
+// row's parent. A seed from outside the context (a hidden bank) says nothing
+// about where the rows live, so the selector has to name the container.
 function destinationFor(adapter, parentCtx, selector, templateSource, trace, opts) {
+  const seedParent = adapter.parent(templateSource)
+  if (seedParent && isWithin(adapter, parentCtx, seedParent) && !isSeedOrNoData(adapter, seedParent, opts)) {
+    return seedParent
+  }
   const container = finalChildCombinatorLeft(selector)
   if (!container) {
-    const seedParent = adapter.parent(templateSource)
-    if (seedParent && isWithin(adapter, parentCtx, seedParent) && !isSeedOrNoData(adapter, seedParent, opts)) {
-      return seedParent
-    }
     throw new EmptyListInsert(
       trace.path,
       `the list selector "${selector}" names no container to hold the new rows — write it as "container > row" (for example "ol.comments > li") so the cloned row lands in the list`,
