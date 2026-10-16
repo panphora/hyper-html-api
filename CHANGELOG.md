@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1] - 2026-10-16
+
+### Fixed
+- An empty list grows from its seed even when the row selector excludes seeds with `:not([cms-template])`
+
+
+
 ## [0.11.0] - 2026-10-16
 
 ### Added
