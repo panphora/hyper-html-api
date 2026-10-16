@@ -8,7 +8,9 @@
 // and the whole dist is wrapped in an outer IIFE so esbuild's
 // `var hyperHtmlApiData` global never leaks to window. It always creates/merges
 // window.clay and attaches clay.extractData / clay.applyData / clay.loaded.data,
-// order-independent. `--check` exits non-zero when the copy is missing or stale.
+// order-independent. It also writes the ES module build of the same entry as
+// clayjs/src/vendor/hyper-html-api-data.vendor.js, which the visitor-drafts
+// plugin imports. `--check` exits non-zero when either copy is missing or stale.
 
 import fs from 'fs'
 import path from 'path'
@@ -20,8 +22,16 @@ const rootDir = path.join(__dirname, '..')
 const distFile = path.join(rootDir, 'dist', 'hyper-html-api.engine.min.js')
 const clayFile = path.join(rootDir, '..', 'clayjs', 'entries', 'clay-data.js')
 
+const esmFile = path.join(rootDir, 'dist', 'hyper-html-api.engine.esm.js')
+const vendorFile = path.join(rootDir, '..', 'clayjs', 'src', 'vendor', 'hyper-html-api-data.vendor.js')
+
 const HEADER = `// GENERATED — do not edit. Vendored from
 // hyper-html-api/dist/hyper-html-api.engine.min.js via hyper-html-api
+// \`npm run copy-to-clayjs\`. Edit the hyper-html-api source and re-run.
+`
+
+const ESM_HEADER = `// GENERATED — do not edit. Vendored from
+// hyper-html-api/dist/hyper-html-api.engine.esm.js via hyper-html-api
 // \`npm run copy-to-clayjs\`. Edit the hyper-html-api source and re-run.
 `
 
@@ -48,6 +58,10 @@ function build(dist) {
   return HEADER + WRAPPER_PREFIX + dist + WRAPPER_SUFFIX
 }
 
+function buildEsm(dist) {
+  return ESM_HEADER + dist
+}
+
 const isCheck = process.argv.includes('--check')
 
 if (!fs.existsSync(distFile)) {
@@ -56,13 +70,21 @@ if (!fs.existsSync(distFile)) {
   process.exit(1)
 }
 
+if (!fs.existsSync(esmFile)) {
+  if (isCheck) process.exit(1)
+  console.error('Error: dist/hyper-html-api.engine.esm.js not found. Run "npm run build:engine:esm" first.')
+  process.exit(1)
+}
+
 const minified = fs.readFileSync(distFile, 'utf8').trim()
 const expected = build(minified)
+const expectedEsm = buildEsm(fs.readFileSync(esmFile, 'utf8').trim())
 
 if (isCheck) {
-  if (!fs.existsSync(clayFile)) process.exit(1)
+  if (!fs.existsSync(clayFile) || !fs.existsSync(vendorFile)) process.exit(1)
   const actual = fs.readFileSync(clayFile, 'utf8')
-  process.exit(actual === expected ? 0 : 1)
+  const actualEsm = fs.readFileSync(vendorFile, 'utf8')
+  process.exit(actual === expected && actualEsm === expectedEsm ? 0 : 1)
 }
 
 const clayDir = path.dirname(clayFile)
@@ -74,3 +96,6 @@ if (!fs.existsSync(clayDir)) {
 
 fs.writeFileSync(clayFile, expected, 'utf8')
 console.log('✓ Updated clayjs/entries/clay-data.js')
+
+fs.writeFileSync(vendorFile, expectedEsm, 'utf8')
+console.log('✓ Updated clayjs/src/vendor/hyper-html-api-data.vendor.js')
