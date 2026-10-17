@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3] - 2026-10-17
+
+### Changed
+- Stamp the conformance corpus with engine version 0.11.2
+
+
+
 ## [0.11.2] - 2026-10-16
 
 ### Fixed

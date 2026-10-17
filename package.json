@@ -9,7 +9,7 @@
     "apply",
     "CMS"
   ],
-  "version": "0.11.2",
+  "version": "0.11.3",
   "homepage": "https://github.com/panphora/hyper-html-api",
   "bugs": {
     "url": "https://github.com/panphora/hyper-html-api/issues"
