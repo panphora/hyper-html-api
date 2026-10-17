@@ -12,46 +12,42 @@ const UNTRIMMED_PROPS = new Set(['textContent', 'innerText'])
 
 // Elements whose content loses one leading LF to the HTML parser: the tokenizer
 // drops a newline that immediately follows the start tag.
-const NEWLINE_DROPPING_TAGS = new Set(['pre', 'textarea'])
-
 // Compares what the caller asked for against a fresh extraction of the
 // serialized source, so a write that serialized away or never landed throws
 // WriteNotRoundTripped instead of returning a false success. Only the supplied
 // projection is checked: omitted keys and undefined are skipped exactly as the
-// writer skips them, which is what keeps partial updates working. `source` is
-// the adapter, root and options that extraction read, so the guard can see
-// which element a text rule matched instead of guessing from its selector.
-export function assertRoundTrip(rules, requested, actual, source) {
-  check(rules, requested, actual, [], source ? { ...source, rules } : null)
+// writer skips them, which is what keeps partial updates working.
+export function assertRoundTrip(rules, requested, actual) {
+  check(rules, requested, actual, [])
 }
 
-function check(rule, want, got, path, source) {
+function check(rule, want, got, path) {
   if (want === undefined) return
   if (typeof rule === 'string') {
-    checkScalarRule(rule, want, got, path, source)
+    checkScalarRule(rule, want, got, path)
     return
   }
   if (Array.isArray(rule)) {
-    checkList(rule[1], want, got, path, source)
+    checkList(rule[1], want, got, path)
     return
   }
   if (typeof rule === 'object' && rule !== null) {
-    checkObject(rule, want, got, path, source)
+    checkObject(rule, want, got, path)
   }
 }
 
-function checkScalarRule(rule, want, got, path, source) {
+function checkScalarRule(rule, want, got, path) {
   if (rule.endsWith('[]')) {
     checkTextList(want, got, path)
     return
   }
   if (rule.startsWith('@')) {
-    checkPropOrAttr(rule.slice(1), want, got, path, '', source)
+    checkPropOrAttr(rule.slice(1), want, got, path)
     return
   }
   const at = ruleAttrIndex(rule)
   if (at !== -1) {
-    checkPropOrAttr(rule.slice(at + 1), want, got, path, rule.slice(0, at), source)
+    checkPropOrAttr(rule.slice(at + 1), want, got, path)
     return
   }
   checkText(want, got, path)
@@ -66,19 +62,19 @@ function checkTextList(want, got, path) {
   for (let i = 0; i < want.length; i++) checkText(want[i], got[i], [...path, i])
 }
 
-function checkObject(rule, want, got, path, source) {
+function checkObject(rule, want, got, path) {
   if (!isPlainObject(want) || !isPlainObject(got)) fail(path)
   for (const [key, sub] of Object.entries(rule)) {
-    check(sub, want[key], got[key], [...path, key], source)
+    check(sub, want[key], got[key], [...path, key])
   }
 }
 
-function checkList(shape, want, got, path, source) {
+function checkList(shape, want, got, path) {
   if (!Array.isArray(want) || !Array.isArray(got) || want.length !== got.length) fail(path)
-  for (let i = 0; i < want.length; i++) check(shape, want[i], got[i], [...path, i], source)
+  for (let i = 0; i < want.length; i++) check(shape, want[i], got[i], [...path, i])
 }
 
-function checkPropOrAttr(name, want, got, path, selector, source) {
+function checkPropOrAttr(name, want, got, path) {
   if (!DOM_PROPERTIES_SET.has(name)) {
     if (want == null) {
       if (got != null) fail(path)
@@ -88,7 +84,7 @@ function checkPropOrAttr(name, want, got, path, selector, source) {
     return
   }
   if (UNTRIMMED_PROPS.has(name)) {
-    if (!sameUntrimmed(String(want ?? ''), got, selector, path, source)) fail(path)
+    if (!sameUntrimmed(String(want ?? ''), got)) fail(path)
     return
   }
   if (DOM_PROPERTIES_WRITE_SET.has(name)) {
@@ -116,50 +112,10 @@ function sameString(want, got) {
   return got != null && normalizeNewlines(want) === normalizeNewlines(got)
 }
 
-// @textContent compares exactly, with one exception: a leading newline after a
-// pre/textarea start tag never reaches the DOM, so it cannot come back.
-function sameUntrimmed(want, got, selector, path, source) {
-  if (got == null) return false
-  const wantText = normalizeNewlines(want)
-  const gotText = normalizeNewlines(got)
-  if (wantText === gotText) return true
-  return wantText.startsWith('\n') && wantText.slice(1) === gotText && dropsLeadingNewline(selector, path, source)
-}
-
-// Which element the rule matched decides the allowance, not how its selector is
-// spelled: an ID or class selector names a pre just as "pre" does. An element
-// that cannot be found refuses, which is the safe answer: the caller compares
-// exactly.
-function dropsLeadingNewline(selector, path, source) {
-  const node = matchedNode(selector, path, source)
-  if (!node) return false
-  const tag = source.adapter.prop(node, 'tagName')
-  return tag != null && NEWLINE_DROPPING_TAGS.has(String(tag).toLowerCase())
-}
-
-// The element a scalar rule reads, found the way extraction found it: walk the
-// rule tree by the reported path to the rule's own context, then match the
-// rule's selector there. Only called for a text rule whose value lost a leading
-// newline, so an ordinary write pays nothing for it.
-function matchedNode(selector, path, source) {
-  if (!source || !source.adapter || !source.root) return null
-  const { adapter, root, opts } = source
-  let rule = source.rules
-  let ctx = root
-  for (const key of path) {
-    if (Array.isArray(rule)) {
-      const match = adapter.find(ctx, rule[0], opts)[key]
-      if (!match) return null
-      ctx = match
-      rule = rule[1]
-    } else if (isPlainObject(rule)) {
-      rule = rule[key]
-    } else {
-      return null
-    }
-  }
-  if (!selector) return ctx
-  return adapter.find(ctx, selector, opts)[0] || null
+// @textContent compares exactly. The writer serializes the extra newline a
+// pre/textarea start tag needs, so a leading newline comes back too.
+function sameUntrimmed(want, got) {
+  return got != null && normalizeNewlines(want) === normalizeNewlines(got)
 }
 
 function isPlainObject(value) {

@@ -150,26 +150,51 @@ test('a CRLF value is accepted as the newline-normalized text the source keeps',
   assert.equal(read(exact.html).body, 'line1\nline2')
 })
 
-test('a leading newline the parser drops after pre/textarea is accepted', () => {
+test('blank lines at the start of a textarea survive, as in a Journal entry', () => {
+  const html =
+    '<script data-rules-name="api" data-rules-version="1">{body:"textarea@textContent"}</script>' +
+    '<textarea>old</textarea>'
+  const body = '\n\nShopping list\n\n- eggs\n- milk\n\n'
+  const once = writeDocument(load, html, { body })
+  assert.equal(read(once.html).body, body)
+  const twice = writeDocument(load, once.html, { body })
+  assert.equal(read(twice.html).body, body)
+})
+
+test('a leading CR or CRLF in textarea text survives too', () => {
+  const html = '<script data-rules-name="api" data-rules-version="1">{ta:"textarea@textContent",pre:"pre@textContent"}</script><textarea></textarea><pre></pre>'
+  const result = writeDocument(load, html, { ta: '\r\nline', pre: '\rline' })
+  assert.equal(read(result.html).ta, '\nline')
+  assert.equal(read(result.html).pre, '\nline')
+})
+
+test('an SVG textarea in a rewritten ancestor keeps its text exactly', () => {
+  const html = '<svg id="wrapper"><textarea id="note">\nkeep</textarea></svg>'
+  const rules = { title: '#wrapper@title' }
+  const result = writeDocument(load, html, { title: 'new' }, { rules })
+  assert.equal(cheerio.load(result.html)('#note').text(), '\nkeep')
+})
+
+test('a leading newline in pre/textarea text survives the write and the next parse', () => {
   const html =
     '<script data-rules-name="api" data-rules-version="1">{pre:"pre@textContent",ta:"textarea@textContent"}</script>' +
     '<pre></pre><textarea></textarea>'
   const result = writeDocument(load, html, { pre: '\nline1', ta: '\nhello' })
   assert.equal(result.changed, true)
-  assert.equal(read(result.html).pre, 'line1')
-  assert.equal(read(result.html).ta, 'hello')
+  assert.equal(read(result.html).pre, '\nline1')
+  assert.equal(read(result.html).ta, '\nhello')
 })
 
-test('the leading-newline allowance follows the matched element, not the selector text', () => {
+test('the extra serialized newline follows the matched element, not the selector text', () => {
   const html = '<pre id="code"></pre><textarea id="note"></textarea>'
   const rules = { code: '#code@textContent', note: '#note@textContent' }
   const result = writeDocument(load, html, { code: '\nhello', note: '\nworld' }, { rules })
 
   assert.equal(result.changed, true)
-  assert.ok(result.html.includes('<pre id="code">\nhello</pre>'))
+  assert.ok(result.html.includes('<pre id="code">\n\nhello</pre>'))
   assert.deepEqual(extract(cheerioAdapter, cheerio.load(result.html).root(), rules), {
-    code: 'hello',
-    note: 'world',
+    code: '\nhello',
+    note: '\nworld',
   })
 })
 

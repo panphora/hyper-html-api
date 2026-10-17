@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.2] - 2026-10-16
+
+### Fixed
+- Text written into a pre, textarea or listing keeps its leading blank line: the writer adds the extra newline the HTML parser drops, as browsers do when they serialize (a leading CR or CRLF too; SVG and MathML textareas are left alone)
+- writeDocument's read-back check compares that text exactly instead of excusing the lost newline
+
 ## [0.11.1] - 2026-10-16
 
 ### Fixed

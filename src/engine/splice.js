@@ -103,12 +103,40 @@ function hasAncestorIn(r, set) {
   return false
 }
 
+// The HTML serializer writes an extra newline after a pre, textarea or listing
+// start tag when the text starts with one, because the parser drops the first.
+// Cheerio's serializer skips that step, so a leading blank line would be lost.
+// Only HTML elements drop it (an SVG or MathML textarea keeps it), and a
+// written value can still carry a CR, which the parser turns into that LF.
+const NEWLINE_DROPPING = new Set(['pre', 'textarea', 'listing'])
+const HTML_NS = 'http://www.w3.org/1999/xhtml'
+
+function serialize($, r) {
+  const fixed = []
+  const visit = (n) => {
+    if (n.type === 'tag' && NEWLINE_DROPPING.has(n.name) && (n.namespace == null || n.namespace === HTML_NS)) {
+      const first = n.children && n.children[0]
+      if (first && first.type === 'text' && /^[\n\r]/.test(first.data)) {
+        fixed.push(first)
+        first.data = '\n' + first.data
+      }
+    }
+    for (const c of n.children || []) visit(c)
+  }
+  visit(r || raw($.root()))
+  try {
+    return r ? $.html(r) : $.html()
+  } finally {
+    for (const t of fixed) t.data = t.data.slice(1)
+  }
+}
+
 // Replaces the source span of each topmost changed element with its fresh
 // serialization, then proves the result by reparsing: the spliced text must
 // render exactly like the mutated tree. Anything unprovable falls back to the
 // whole-document render.
 export function spliceDocument(load, src, $, tracker) {
-  const full = $.html()
+  const full = serialize($)
   const fallback = { html: full, spliced: false }
   const docRoot = raw($.root())
   const targets = new Set()
@@ -125,8 +153,8 @@ export function spliceDocument(load, src, $, tracker) {
   for (const r of top) {
     const { startOffset, endOffset } = r.sourceCodeLocation
     if (endOffset > prevStart) return fallback
-    out = out.slice(0, startOffset) + $.html(r) + out.slice(endOffset)
+    out = out.slice(0, startOffset) + serialize($, r) + out.slice(endOffset)
     prevStart = startOffset
   }
-  return load(out).html() === full ? { html: out, spliced: true } : fallback
+  return serialize(load(out)) === full ? { html: out, spliced: true } : fallback
 }
