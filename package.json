@@ -34,6 +34,7 @@
     "./dom": "./src/adapters/dom.js",
     "./data": "./src/data.js",
     "./upgrade": "./src/upgrade.js",
+    "./page": "./src/page.js",
     "./write": "./src/write.js"
   },
   "scripts": {
@@ -67,6 +68,7 @@
     "hyper-morph": "^1.6.3"
   },
   "devDependencies": {
+    "@panphora/clayjs": "^1.13.1",
     "@web/test-runner": "^0.20.0",
     "@web/test-runner-playwright": "^0.11.0",
     "chai": "^4.3.6",
