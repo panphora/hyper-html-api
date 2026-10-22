@@ -36,6 +36,10 @@ let config = {
     </html>
   `,
 
+  // A synchronous test fails once its wall time passes the timeout, so a page that stalls
+  // under CPU load (a release running beside other builds) failed a 2 s budget on code that
+  // takes milliseconds. 20 s still catches a real hang.
+  testFramework: { config: { timeout: 20000 } },
   nodeResolve: true,
   coverage: true,
   coverageConfig: {
