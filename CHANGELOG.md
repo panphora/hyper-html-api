@@ -134,8 +134,16 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-22
+
+### Added
+- `readPageDocument` and `writePageDocument` in `hyper-html-api/page` read and write pages through a page store, so the HTML you get back and the store always match.
+- Page writes that are missing, out of date or invalid are refused with `revision-required`, `revision-stale` or `invalid-content`, and change nothing.
+
 ### Changed
 - License: relicensed to MIT-0 (MIT No Attribution). Same rights, attribution no longer required.
+- Documents without a page store keep working through `writeDocument`.
+- Importing the main entry does not pull in Yjs.
 
 ## [0.6.4] - 2026-08-16
 
