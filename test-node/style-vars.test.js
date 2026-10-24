@@ -34,6 +34,19 @@ test('readStyleVar does not split on a ; inside quotes, parens or a comment', ()
   assert.equal(readStyleVar('/* a;b */ color: red; --a: x', '--a'), 'x')
 })
 
+test('a comment before the name does not hide the declaration', () => {
+  assert.equal(readStyleVar('/* t */ --x: red !important; color: black', '--x'), 'red')
+  assert.equal(writeStyleVar('/* t */ --x: red; color: black', '--x', '').trim(), 'color: black')
+})
+
+test('a comment between name and colon and around !important', () => {
+  assert.equal(readStyleVar('--x /* a */ : blue /* b */ ! important', '--x'), 'blue')
+})
+
+test('a comment-like run inside a string stays', () => {
+  assert.equal(readStyleVar('--f: "/* x */"', '--f'), '"/* x */"')
+})
+
 test('writeStyleVar appends, replaces and removes', () => {
   assert.equal(writeStyleVar(null, '--a', 'x'), '--a: x')
   assert.equal(writeStyleVar('', '--a', 'x'), '--a: x')

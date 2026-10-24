@@ -88,6 +88,27 @@ test('a plain declaration through @style is still refused', () => {
   refuseBoth(SRC, { p: '#p@style' }, { p: 'color: blue' })
 })
 
+test('a raw @style write is refused even when only custom properties change', () => {
+  refuseBoth(SRC.replace('style="color: red"', 'style="color: red; --accent: red"'), { s: 'html@style' }, { s: 'color: red; --accent: blue' })
+})
+
+test('reordering custom properties through @style is refused', () => {
+  const html =
+    '<!doctype html><html style="--bg: url(https://example.invalid/x); --bg: red"><head></head><body></body></html>'
+  refuseBoth(html, { s: 'html@style' }, { s: '--bg: red; --bg: url(https://example.invalid/x)' })
+})
+
+test('custom property names are case-sensitive in the value check', () => {
+  const html =
+    '<!doctype html><html style="--BG: url(https://example.invalid/x); --bg: red"><head></head><body></body></html>'
+  refuseBoth(html, { bg: 'html@--bg' }, { bg: 'url(https://example.invalid/x)' })
+})
+
+test('a custom property write leaves a differently cased one alone', () => {
+  const html = '<!doctype html><html style="--BG: blue"><head></head><body></body></html>'
+  assert.equal(applyBoth(html, { bg: 'html@--bg' }, { bg: 'red' }, 'html'), '--BG: blue; --bg: red')
+})
+
 test('a style text rule is still refused', () => {
   refuseBoth('<!doctype html><style id="t">a{}</style>', { t: '#t' }, { t: 'b{}' })
 })

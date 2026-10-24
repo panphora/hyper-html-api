@@ -39,7 +39,33 @@ function splitDeclarations(text) {
   return parts
 }
 
+// The declaration with its comments removed. Quotes are respected, so a
+// comment-like run inside a string stays.
+function stripComments(text) {
+  let out = ''
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (quote) {
+      out += c
+      if (c === '\\' && i + 1 < text.length) out += text[++i]
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2)
+      i = end === -1 ? text.length : end + 1
+      out += ' '
+      continue
+    }
+    if (c === '"' || c === "'") quote = c
+    out += c
+  }
+  return out
+}
+
 function parseDeclaration(raw) {
+  raw = stripComments(raw)
   const colon = raw.indexOf(':')
   if (colon === -1) return null
   const name = raw.slice(0, colon).trim()
@@ -91,6 +117,17 @@ export function writeStyleVar(styleText, name, value) {
     next = body === '' ? `${name}: ${value}` : `${body}${body.endsWith(';') ? ' ' : '; '}${name}: ${value}`
   }
   return next.trim() === '' ? null : next
+}
+
+// Writes one custom property through an adapter, touching nothing when the
+// value is already there. An empty value removes the property, and the style
+// attribute with it once nothing is left.
+export function setStyleVar(adapter, node, name, want) {
+  const current = adapter.attr(node, 'style')
+  if ((readStyleVar(current, name) ?? '') === want) return
+  const next = writeStyleVar(current, name, want)
+  if (next == null) adapter.removeAttr(node, 'style')
+  else adapter.attr(node, 'style', next)
 }
 
 // Every declaration in the attribute, in order, parsed. Empty segments (a

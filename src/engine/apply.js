@@ -11,7 +11,7 @@ import {
 } from './errors.js'
 import { listDiff } from './diff.js'
 import { ruleAttrIndex } from './rule-syntax.js'
-import { isCustomPropertyName, readStyleVar, writeStyleVar } from './style-vars.js'
+import { isCustomPropertyName, setStyleVar } from './style-vars.js'
 
 export function apply(adapter, root, rules, data, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
@@ -101,17 +101,23 @@ function writeText(adapter, node, value) {
   if (adapter.text(node) !== target) adapter.text(node, target)
 }
 
+// One custom property in the style attribute. A guarded adapter takes it
+// through styleVar(), so its policy sees the property name and the value,
+// never a whole style string it would have to diff.
+function writeCustomProperty(adapter, node, name, want) {
+  if (adapter.styleVar) {
+    adapter.styleVar(node, name, want)
+    return
+  }
+  setStyleVar(adapter, node, name, want)
+}
+
 // Returns the (possibly new) node. For outerHTML, the original is detached
 // and a freshly parsed element takes its place; that new node is returned.
 // For every other write, returns the original node unchanged.
 function writePropOrAttr(adapter, node, name, value) {
   if (isCustomPropertyName(name)) {
-    const want = value == null ? '' : String(value).trim()
-    const current = adapter.attr(node, 'style')
-    if ((readStyleVar(current, name) ?? '') === want) return node
-    const next = writeStyleVar(current, name, want)
-    if (next == null) adapter.removeAttr(node, 'style')
-    else adapter.attr(node, 'style', next)
+    writeCustomProperty(adapter, node, name, value == null ? '' : String(value).trim())
     return node
   }
   if (DOM_PROPERTIES_READ_ONLY_SET.has(name)) {

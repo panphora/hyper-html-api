@@ -1,6 +1,6 @@
 import { POLICY_TOKENS } from '../lib/region-capabilities.js'
 import { WriteRefused } from './errors.js'
-import { isCustomPropertyName, listDeclarations } from './style-vars.js'
+import { isCustomPropertyName, setStyleVar } from './style-vars.js'
 
 export const WRITE_POLICY = Object.freeze({
   refusedRuleForms: ['innerHTML', 'outerHTML'],
@@ -91,28 +91,6 @@ export function checkCustomPropertyValue(value, policy = WRITE_POLICY) {
   return null
 }
 
-// A style attribute write is content when it changes nothing but custom
-// properties, and every custom property it sets or changes has a safe value.
-// Ordinary declarations must come out identical, in the same order.
-function checkStyleChange(before, after, policy) {
-  const was = listDeclarations(before)
-  const now = listDeclarations(after)
-  const plain = (list) => list.filter((d) => !isCustomPropertyName(d.name))
-  const key = (d) => `${d.name.toLowerCase()}\u0000${d.value}\u0000${d.important}`
-  const wasPlain = plain(was).map(key)
-  const nowPlain = plain(now).map(key)
-  if (wasPlain.length !== nowPlain.length || wasPlain.some((k, i) => k !== nowPlain[i])) {
-    return 'attribute "style" is not content (only custom properties may change)'
-  }
-  const old = new Set(was.filter((d) => isCustomPropertyName(d.name)).map(key))
-  for (const d of now) {
-    if (!isCustomPropertyName(d.name) || old.has(key(d))) continue
-    const reason = checkCustomPropertyValue(d.value, policy)
-    if (reason) return reason
-  }
-  return null
-}
-
 // Wraps an adapter so every write is checked against the policy first. A write
 // that breaks it is skipped and recorded; call assertClean() after apply() to
 // throw one WriteRefused listing every violation.
@@ -145,24 +123,21 @@ export function guardAdapter(adapter, policy = WRITE_POLICY) {
     },
     attr(node, name, value) {
       if (value === undefined) return adapter.attr(node, name)
-      if (String(name).toLowerCase() === 'style') {
-        if (!allowTarget(node)) return
-        const reason = checkStyleChange(adapter.attr(node, 'style'), value, policy)
-        if (reason) return refuse(node, reason)
-        adapter.attr(node, name, value)
-        return
-      }
       if (allowAttr(node, name, value)) adapter.attr(node, name, value)
     },
     removeAttr(node, name) {
-      if (String(name).toLowerCase() === 'style') {
-        if (!allowTarget(node)) return
-        const reason = checkStyleChange(adapter.attr(node, 'style'), '', policy)
-        if (reason) return refuse(node, reason)
-        adapter.removeAttr(node, name)
-        return
-      }
       if (allowAttr(node, name, null)) adapter.removeAttr(node, name)
+    },
+    // The engine's @--name write: one custom property, checked by name and
+    // value. Every other declaration in the attribute is left as it is.
+    styleVar(node, name, value) {
+      if (!allowTarget(node)) return
+      if (!isCustomPropertyName(name)) return refuse(node, `"${name}" is not a custom property`)
+      if (value !== '') {
+        const reason = checkCustomPropertyValue(value, policy)
+        if (reason) return refuse(node, reason)
+      }
+      setStyleVar(adapter, node, name, value)
     },
     prop(node, name, value) {
       if (value === undefined) return adapter.prop(node, name)
