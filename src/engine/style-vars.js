@@ -10,9 +10,10 @@ export function isCustomPropertyName(name) {
 
 // Split on top-level semicolons, ignoring any inside quotes, brackets or
 // comments, so url("a;b") or a comment never cuts a declaration in half.
+// Brackets close only their own kind, as in CSS.
 function splitDeclarations(text) {
   const parts = []
-  let depth = 0
+  const stack = []
   let quote = null
   let start = 0
   for (let i = 0; i < text.length; i++) {
@@ -28,9 +29,11 @@ function splitDeclarations(text) {
       continue
     }
     if (c === '"' || c === "'") quote = c
-    else if (c === '(' || c === '[' || c === '{') depth++
-    else if ((c === ')' || c === ']' || c === '}') && depth > 0) depth--
-    else if (c === ';' && depth === 0) {
+    else if (c === '(') stack.push(')')
+    else if (c === '[') stack.push(']')
+    else if (c === '{') stack.push('}')
+    else if ((c === ')' || c === ']' || c === '}') && stack[stack.length - 1] === c) stack.pop()
+    else if (c === ';' && stack.length === 0) {
       parts.push(text.slice(start, i))
       start = i + 1
     }

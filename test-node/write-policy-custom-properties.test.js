@@ -151,3 +151,43 @@ test('checkCustomPropertyValue refuses values that can load, close or inject', (
   assert.match(checkCustomPropertyValue('red}'), /"}" is not allowed/)
   assert.match(checkCustomPropertyValue('url(x.png)'), /"url\(\)" is not allowed/)
 })
+
+test('checkCustomPropertyValue refuses an unbalanced value', () => {
+  for (const value of [
+    "'red",
+    '"a',
+    'oklch(50% 0.1 200',
+    '(--x]',
+    '[a)',
+    'a)',
+    'red /*',
+    'red /* x */',
+    '"a\nb"',
+    'a\tb',
+  ]) {
+    const reason = checkCustomPropertyValue(value)
+    assert.equal(typeof reason, 'string', JSON.stringify(value))
+    assert.ok(reason.length > 0, JSON.stringify(value))
+  }
+})
+
+test('checkCustomPropertyValue allows a balanced value', () => {
+  for (const value of [
+    "'Fraunces', ui-serif, Georgia, serif",
+    '"Inter"',
+    'calc((1rem + 2px) * 2)',
+    'var(--x, oklch(58% 0.2 17))',
+    'color-mix(in oklch, red 20%, blue)',
+    '[a] b',
+  ]) {
+    assert.equal(checkCustomPropertyValue(value), null, value)
+  }
+})
+
+test('a custom property write refuses a value that would swallow the rest of the attribute', () => {
+  refuseBoth(
+    '<!doctype html><html style="--a: 1; color: red"><head></head><body></body></html>',
+    { a: 'html@--a' },
+    { a: '(--x]' },
+  )
+})

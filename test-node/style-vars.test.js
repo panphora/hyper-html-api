@@ -43,6 +43,12 @@ test('a comment between name and colon and around !important', () => {
   assert.equal(readStyleVar('--x /* a */ : blue /* b */ ! important', '--x'), 'blue')
 })
 
+test('readStyleVar treats a mismatched closer as not closing the block', () => {
+  assert.equal(readStyleVar('--a: (x]; color: red', 'color'), null)
+  assert.equal(readStyleVar('--a: (x); color: red', 'color'), 'red')
+  assert.equal(readStyleVar('--a: [x); color: red', 'color'), null)
+})
+
 test('a comment-like run inside a string stays', () => {
   assert.equal(readStyleVar('--f: "/* x */"', '--f'), '"/* x */"')
 })

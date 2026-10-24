@@ -77,6 +77,32 @@ function isOrHoldsRulesTag(adapter, node) {
   return holdsRulesTag(adapter, node)
 }
 
+// Every quote closed, every bracket closed by its own kind, no comment and no
+// control character. A value that fails this would swallow the declarations
+// after it in the style attribute.
+function unbalancedReason(text) {
+  if (/[\u0000-\u001f\u007f]/.test(text)) return 'control characters are not allowed in a custom property value'
+  const stack = []
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (quote) {
+      if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'") quote = c
+    else if (c === '/' && text[i + 1] === '*') return 'comments are not allowed in a custom property value'
+    else if (c === '(') stack.push(')')
+    else if (c === '[') stack.push(']')
+    else if (c === ')' || c === ']') {
+      if (stack.pop() !== c) return `"${c}" does not close anything in this custom property value`
+    }
+  }
+  if (quote) return 'a custom property value must close its quotes'
+  if (stack.length) return 'a custom property value must close its brackets'
+  return null
+}
+
 // A custom property value that cannot load anything, close its declaration, or
 // carry markup. Colors, font stacks, lengths and keywords all pass.
 export function checkCustomPropertyValue(value, policy = WRITE_POLICY) {
@@ -85,6 +111,8 @@ export function checkCustomPropertyValue(value, policy = WRITE_POLICY) {
   if (text.length > rules.maxLength) return `custom property values are limited to ${rules.maxLength} characters`
   const ch = rules.refusedCharacters.find((c) => text.includes(c))
   if (ch) return `${JSON.stringify(ch)} is not allowed in a custom property value`
+  const unbalanced = unbalancedReason(text)
+  if (unbalanced) return unbalanced
   const lower = text.toLowerCase()
   const fn = rules.refusedFunctions.find((f) => new RegExp(`(^|[^a-z0-9_-])${f.replace(/[-]/g, '\\-')}\\s*\\(`).test(lower))
   if (fn) return `"${fn}()" is not allowed in a custom property value`
