@@ -1,6 +1,7 @@
 import { DOM_PROPERTIES_SET } from './dom-properties.js'
 import { MaxRuleDepthExceeded, MAX_RULE_DEPTH } from './errors.js'
 import { ruleAttrIndex } from './rule-syntax.js'
+import { isCustomPropertyName, readStyleVar } from './style-vars.js'
 
 export function extract(adapter, root, rules, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
@@ -88,6 +89,7 @@ function reportRows(opts, trace, nodes) {
 }
 
 function readPropOrAttr(adapter, node, name) {
+  if (isCustomPropertyName(name)) return readStyleVar(adapter.attr(node, 'style'), name)
   if (DOM_PROPERTIES_SET.has(name)) {
     const v = adapter.prop(node, name)
     return v == null ? null : String(v)

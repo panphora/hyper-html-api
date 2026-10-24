@@ -11,6 +11,7 @@ import {
 } from './errors.js'
 import { listDiff } from './diff.js'
 import { ruleAttrIndex } from './rule-syntax.js'
+import { isCustomPropertyName, readStyleVar, writeStyleVar } from './style-vars.js'
 
 export function apply(adapter, root, rules, data, opts = {}) {
   if (Object.prototype.hasOwnProperty.call(opts, 'exclude') && adapter.semanticExclude === false) {
@@ -104,6 +105,15 @@ function writeText(adapter, node, value) {
 // and a freshly parsed element takes its place; that new node is returned.
 // For every other write, returns the original node unchanged.
 function writePropOrAttr(adapter, node, name, value) {
+  if (isCustomPropertyName(name)) {
+    const want = value == null ? '' : String(value).trim()
+    const current = adapter.attr(node, 'style')
+    if ((readStyleVar(current, name) ?? '') === want) return node
+    const next = writeStyleVar(current, name, want)
+    if (next == null) adapter.removeAttr(node, 'style')
+    else adapter.attr(node, 'style', next)
+    return node
+  }
   if (DOM_PROPERTIES_READ_ONLY_SET.has(name)) {
     const current = adapter.prop(node, name)
     if (current === value || (current != null && value != null && String(current) === String(value))) return node

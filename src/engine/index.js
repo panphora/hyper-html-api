@@ -11,6 +11,7 @@ export * as errors from './errors.js'
 export { DOM_PROPERTIES, DOM_PROPERTIES_SET, DOM_PROPERTIES_READ_ONLY_SET } from './dom-properties.js'
 export { WRITE_POLICY, guardAdapter, checkAttribute, urlScheme } from './write-policy.js'
 export { planWrite } from './write-plan.js'
+export { isCustomPropertyName, readStyleVar, writeStyleVar } from './style-vars.js'
 export { assertRoundTrip } from './round-trip.js'
 export { trackAdapter, spliceDocument } from './splice.js'
 

@@ -5,6 +5,7 @@ import {
 } from './dom-properties.js'
 import { WriteNotRoundTripped } from './errors.js'
 import { ruleAttrIndex } from './rule-syntax.js'
+import { isCustomPropertyName } from './style-vars.js'
 
 // Props whose read-side value keeps its whitespace. Every other text rule reads
 // trimmed, which is what writeText compares against.
@@ -75,6 +76,10 @@ function checkList(shape, want, got, path) {
 }
 
 function checkPropOrAttr(name, want, got, path) {
+  if (isCustomPropertyName(name)) {
+    if ((want == null ? '' : String(want).trim()) !== (got ?? '')) fail(path)
+    return
+  }
   if (!DOM_PROPERTIES_SET.has(name)) {
     if (want == null) {
       if (got != null) fail(path)
