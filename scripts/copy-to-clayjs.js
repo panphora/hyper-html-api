@@ -10,12 +10,14 @@
 // window.clay and attaches clay.extractData / clay.applyData / clay.loaded.data,
 // order-independent. It also writes the ES module build of the same entry as
 // clayjs/src/vendor/hyper-html-api-data.vendor.js, which the visitor-drafts
+// plugin imports, and the ES module build of the upgrade entry (src/upgrade.js)
+// as clayjs/src/vendor/hyper-html-api-upgrade.vendor.js, which the upgrade
 // plugin imports.
 //
-// Both bundles are built from src/data.js on every run, so a copy can never
-// ship a stale dist file. `--check` compares the ClayJS copies against a build
-// it makes into a temp directory (never against the committed dist) and exits
-// non-zero when either copy is missing or differs.
+// Every bundle is built from source on every run, so a copy can never ship a
+// stale dist file. `--check` compares the ClayJS copies against a build it makes
+// into a temp directory (never against the committed dist) and exits non-zero
+// when any copy is missing or differs.
 
 import esbuild from 'esbuild'
 import fs from 'fs'
@@ -30,6 +32,7 @@ const srcFile = path.join(rootDir, 'src', 'data.js')
 const distDir = path.join(rootDir, 'dist')
 const clayFile = path.join(rootDir, '..', 'clayjs', 'entries', 'clay-data.js')
 const vendorFile = path.join(rootDir, '..', 'clayjs', 'src', 'vendor', 'hyper-html-api-data.vendor.js')
+const upgradeVendorFile = path.join(rootDir, '..', 'clayjs', 'src', 'vendor', 'hyper-html-api-upgrade.vendor.js')
 
 const HEADER = `// GENERATED — do not edit. Vendored from
 // hyper-html-api/dist/hyper-html-api.engine.min.js via hyper-html-api
@@ -39,6 +42,19 @@ const HEADER = `// GENERATED — do not edit. Vendored from
 const ESM_HEADER = `// GENERATED — do not edit. Vendored from
 // hyper-html-api/dist/hyper-html-api.engine.esm.js via hyper-html-api
 // \`npm run copy-to-clayjs\`. Edit the hyper-html-api source and re-run.
+`
+
+const UPGRADE_ESM_HEADER = `// GENERATED — do not edit. Vendored from
+// hyper-html-api/src/upgrade.js via hyper-html-api
+// \`npm run copy-to-clayjs\`. Edit the hyper-html-api source and re-run.
+`
+
+// The upgrade entry exports the engine and the upgrade flow; ClayJS's upgrade
+// plugin also compares versions, so the vendor re-exports the helpers from
+// src/upgrade/check.js beside it.
+const UPGRADE_ENTRY = `export { default } from './src/upgrade.js'
+export * from './src/upgrade.js'
+export { readMeta, parseVersion, isNewerVersion } from './src/upgrade/check.js'
 `
 
 const WRAPPER_PREFIX = `(function () {
@@ -66,6 +82,10 @@ function build(dist) {
 
 function buildEsm(dist) {
   return ESM_HEADER + dist
+}
+
+function buildUpgradeEsm(dist) {
+  return UPGRADE_ESM_HEADER + dist
 }
 
 // The same two esbuild invocations `npm run build:engine` and
@@ -98,14 +118,46 @@ function expectedFrom(built) {
   }
 }
 
+// The same esbuild invocation `npm run build:engine:esm` makes, with the
+// upgrade entry standing in for src/data.js.
+function buildUpgradeModule(outDir) {
+  const esm = path.join(outDir, 'hyper-html-api.upgrade.esm.js')
+  esbuild.buildSync({
+    stdin: {
+      contents: UPGRADE_ENTRY,
+      resolveDir: rootDir,
+      sourcefile: 'hyper-html-api-upgrade-entry.js',
+      loader: 'js',
+    },
+    bundle: true,
+    minify: true,
+    format: 'esm',
+    outfile: esm,
+  })
+  return esm
+}
+
+function expectedUpgrade() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyper-html-api-upgrade-'))
+  try {
+    return buildUpgradeEsm(fs.readFileSync(buildUpgradeModule(tempDir), 'utf8').trim())
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 if (process.argv.includes('--check')) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyper-html-api-engine-'))
   const expected = expectedFrom(buildEngine(tempDir))
   fs.rmSync(tempDir, { recursive: true, force: true })
-  if (!fs.existsSync(clayFile) || !fs.existsSync(vendorFile)) process.exit(1)
+  const expectedUpgradeEsm = expectedUpgrade()
+  if (!fs.existsSync(clayFile) || !fs.existsSync(vendorFile) || !fs.existsSync(upgradeVendorFile)) process.exit(1)
   const actual = fs.readFileSync(clayFile, 'utf8')
   const actualEsm = fs.readFileSync(vendorFile, 'utf8')
-  process.exit(actual === expected.clay && actualEsm === expected.vendor ? 0 : 1)
+  const actualUpgradeEsm = fs.readFileSync(upgradeVendorFile, 'utf8')
+  process.exit(
+    actual === expected.clay && actualEsm === expected.vendor && actualUpgradeEsm === expectedUpgradeEsm ? 0 : 1
+  )
 }
 
 const clayDir = path.dirname(clayFile)
@@ -122,3 +174,6 @@ console.log('✓ Updated clayjs/entries/clay-data.js')
 
 fs.writeFileSync(vendorFile, expected.vendor, 'utf8')
 console.log('✓ Updated clayjs/src/vendor/hyper-html-api-data.vendor.js')
+
+fs.writeFileSync(upgradeVendorFile, expectedUpgrade(), 'utf8')
+console.log('✓ Updated clayjs/src/vendor/hyper-html-api-upgrade.vendor.js')
