@@ -1,6 +1,6 @@
 import { POLICY_TOKENS } from '../lib/region-capabilities.js'
 import { WriteRefused } from './errors.js'
-import { isCustomPropertyName, setStyleVar } from './style-vars.js'
+import { isCustomPropertyName, readStyleVar, setStyleVar } from './style-vars.js'
 
 export const WRITE_POLICY = Object.freeze({
   refusedRuleForms: ['innerHTML', 'outerHTML'],
@@ -159,6 +159,7 @@ export function guardAdapter(adapter, policy = WRITE_POLICY) {
     // The engine's @--name write: one custom property, checked by name and
     // value. Every other declaration in the attribute is left as it is.
     styleVar(node, name, value) {
+      if ((readStyleVar(adapter.attr(node, 'style'), name) ?? '') === value) return
       if (!allowTarget(node)) return
       if (!isCustomPropertyName(name)) return refuse(node, `"${name}" is not a custom property`)
       if (value !== '') {
