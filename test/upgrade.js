@@ -259,3 +259,20 @@ describe('run (full fetch + migrate round trip)', () => {
     threw.message.should.contain('boom')
   })
 })
+
+describe('upgrade.run: form values reach the upgraded markup', () => {
+  const rules = '<script type="application/json" data-rules-name="api" data-rules-version="1">{"rent":"input[name=rent]@value","paid":"input[name=paid]@checked","note":"textarea@value","plan":"select@value"}</script>'
+  const page = (version, body) => `<!DOCTYPE html><html><head><meta name="hyper-source" content="https://canonical.example/x.html"><meta name="hyper-version" content="${version}"></head><body>${rules}${body}</body></html>`
+  const template = page('2.0.0', '<input name="rent" value="2400"><input name="paid" type="checkbox"><textarea>default</textarea><select><option value="a">A</option><option value="b">B</option></select><select name="untouched"><option>x</option><option>y</option></select>')
+
+  it('writes an input value, a checkbox, a textarea and a select into the HTML the upgrade returns', async () => {
+    const doc = parseDoc(page('1.0.0', '<input name="rent" value="3170"><input name="paid" type="checkbox" checked><textarea>mine</textarea><select><option value="a">A</option><option value="b" selected>B</option></select>'))
+    const result = await run({ doc, loc: new URL('https://fork.example/x.html'), fetchFn: () => Promise.resolve(new Response(template)) })
+    const out = parseDoc(result.html)
+    out.querySelector('input[name=rent]').getAttribute('value').should.equal('3170')
+    out.querySelector('input[name=paid]').hasAttribute('checked').should.equal(true)
+    out.querySelector('textarea').textContent.should.equal('mine')
+    out.querySelectorAll('select')[0].options[1].hasAttribute('selected').should.equal(true)
+    should.equal(out.querySelectorAll('select')[1].querySelector('[selected]'), null)
+  })
+})

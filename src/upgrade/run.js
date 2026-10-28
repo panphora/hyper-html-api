@@ -72,7 +72,37 @@ export async function run({ sourceUrl, dataByName, fromVersion, doc, loc, fetchF
   }
 }
 
+// The engine writes form values as properties, which serialization never sees. The
+// parsed copy has had no other input, so every property that differs from its
+// attribute came from the data and goes into the markup.
+function materializeFormState(doc) {
+  for (const input of doc.querySelectorAll('input')) {
+    const type = (input.getAttribute('type') || '').toLowerCase()
+    if (type === 'file') continue
+    if (type === 'checkbox' || type === 'radio') {
+      if (input.checked !== input.hasAttribute('checked')) input.toggleAttribute('checked', input.checked)
+    } else if (input.value !== (input.getAttribute('value') ?? '')) {
+      input.setAttribute('value', input.value)
+    }
+  }
+  for (const area of doc.querySelectorAll('textarea')) {
+    if (area.value !== area.textContent) area.textContent = area.value
+  }
+  for (const select of doc.querySelectorAll('select')) {
+    const options = [...select.options]
+    if (!select.multiple) {
+      const marked = options.findIndex((option) => option.hasAttribute('selected'))
+      // An unmarked select shows its first option without saying so.
+      if (select.selectedIndex === marked || (marked === -1 && select.selectedIndex <= 0)) continue
+    }
+    for (const option of options) {
+      if (option.selected !== option.hasAttribute('selected')) option.toggleAttribute('selected', option.selected)
+    }
+  }
+}
+
 function serializeDocument(doc) {
+  materializeFormState(doc)
   const name = doc.doctype && doc.doctype.name ? doc.doctype.name : 'html'
   return `<!DOCTYPE ${name}>\n` + doc.documentElement.outerHTML
 }
