@@ -134,6 +134,24 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-30
+
+### Added
+- `@--name` rules read and write one CSS custom property, such as `html@--color-accent`, changing only that declaration in the element's style attribute and leaving every other declaration alone. An empty value removes it.
+- `checkCustomPropertyValue` is exported from the engine, so a typed value can be checked with the same rule a guarded write uses.
+- Guarded writes (`writeDocument`, `applyData`) accept a style change when it touches only custom properties whose values are safe: no unclosed quote or bracket, no mismatched bracket, no comment, no control characters, and nothing that loads a resource, closes the declaration or carries markup. Raw `style`, `<style>`, `<script>` and `<link>` writes stay refused.
+
+### Changed
+- Setting a custom property to the value it already has does nothing, so posting a read back unchanged never errors, as with every other rule form.
+- Cheerio and the DOM return the same value for a custom property, since both adapters share one text parser.
+- Custom property names are matched exactly, so a differently cased name cannot get a refused value through the check.
+- The engine reads a style attribute the way the browser does, closing a bracket only with its own kind.
+
+### Fixed
+- Upgrading a document that has been used keeps form values the data writes as properties (input value, checkbox, textarea, select) in the upgraded markup, instead of refusing the upgrade as data loss.
+- A custom property value with an unclosed quote or bracket, a mismatched bracket or a comment is refused, so it cannot swallow the declarations that follow it.
+- A comment before a declaration's name no longer hides that declaration from the check.
+
 ## [0.12.0] - 2026-10-22
 
 ### Added
