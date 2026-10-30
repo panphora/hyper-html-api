@@ -65,7 +65,7 @@
     "url": "git+https://github.com/panphora/hyper-html-api.git"
   },
   "dependencies": {
-    "hyper-morph": "^1.6.3"
+    "hyper-morph": "^1.7.0"
   },
   "devDependencies": {
     "@panphora/clayjs": "^1.13.1",
